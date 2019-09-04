@@ -74,6 +74,8 @@ using namespace idbdatafile;
 #include "crashtrace.h"
 #include "installdir.h"
 
+extern boost::posix_time::time_duration timeInAddJoiner;
+
 namespace primitiveprocessor
 {
 
@@ -111,6 +113,13 @@ int toInt(const string& val)
     return static_cast<int>(Config::fromText(val));
 }
 
+
+void printTimeInAddJoiner(int sig)
+{
+    cout << "Time building joiners: " << timeInAddJoiner << endl;
+    timeInAddJoiner = boost::posix_time::seconds(0);
+}
+
 void setupSignalHandlers()
 {
 #ifndef _MSC_VER
@@ -122,8 +131,9 @@ void setupSignalHandlers()
     ign.sa_handler = SIG_IGN;
     sigaction(SIGPIPE, &ign, 0);
 
+    timeInAddJoiner = boost::posix_time::seconds(0);
     memset(&ign, 0, sizeof(ign));
-    ign.sa_handler = SIG_IGN;
+    ign.sa_handler = printTimeInAddJoiner;
     sigaction(SIGUSR1, &ign, 0);
 
     memset(&ign, 0, sizeof(ign));

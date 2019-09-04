@@ -120,6 +120,7 @@ uint32_t gSession = 0;
 dbbc::Stats pmstats(statsName);
 #endif
 
+posix_time::time_duration timeInAddJoiner;
 oam::OamCache* oamCache = oam::OamCache::makeOamCache();
 
 //FIXME: there is an anon ns burried later in between 2 named namespaces...
@@ -1346,8 +1347,12 @@ struct BPPHandler
         AddJoiner(boost::shared_ptr<BPPHandler> r, SBS b) : BPPHandlerFunctor(r, b) { }
         int operator()()
         {
+            posix_time::ptime start = posix_time::microsec_clock::universal_time();
             utils::setThreadName("PPHandAddJoiner");
-            return rt->addJoinerToBPP(*bs, dieTime);
+            int ret = rt->addJoinerToBPP(*bs, dieTime);
+            posix_time::ptime end = posix_time::microsec_clock::universal_time();
+            timeInAddJoiner += (end - start);
+            return ret;
         }
     };
 
