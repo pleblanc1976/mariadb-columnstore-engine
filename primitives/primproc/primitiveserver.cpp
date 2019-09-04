@@ -152,7 +152,8 @@ int  noVB = 0;
 const uint8_t fMaxColWidth(8);
 BPPMap bppMap;
 mutex bppLock;
-mutex djLock;  // djLock synchronizes destroy and joiner msgs, see bug 2619
+mutex djMutex;   // lock for djLock, lol.
+std::map<uint64_t, mutex *> djLock;  // djLock synchronizes destroy and joiner msgs, see bug 2619
 volatile int32_t asyncCounter;
 const int asyncMax = 20;	// current number of asynchronous loads
 
@@ -1495,7 +1496,7 @@ struct BPPHandler
         }
     }
 
-    SBPPV grabBPPs(uint32_t uniqueID)
+    inline SBPPV grabBPPs(uint32_t uniqueID)
     {
         BPPMap::iterator it;
         /*
@@ -1531,6 +1532,30 @@ struct BPPHandler
         */
     }
 
+    inline mutex & getDJLock(uint32_t uniqueID)
+    {
+        mutex::scoped_lock lk(djMutex);
+        auto it = djLock.find(uniqueID);
+        if (it != djLock.end())
+            return *it->second;
+        else
+        {
+            auto ret = djLock.insert(make_pair(uniqueID, new mutex())).first;
+            return *ret->second;
+        }
+    }
+    
+    inline void deleteDJLock(uint32_t uniqueID)
+    {
+        mutex::scoped_lock lk(djMutex);
+        auto it = djLock.find(uniqueID);
+        if (it != djLock.end())
+        {
+            delete it->second;
+            djLock.erase(it);
+        }
+    }
+    
     int addJoinerToBPP(ByteStream& bs, const posix_time::ptime& dieTime)
     {
         SBPPV bppv;
@@ -1546,7 +1571,7 @@ struct BPPHandler
 
         if (bppv)
         {
-            mutex::scoped_lock lk(djLock);
+            mutex::scoped_lock lk(getDJLock(uniqueID));
             bppv->get()[0]->addToJoiner(bs);
             return 0;
         }
@@ -1583,7 +1608,7 @@ struct BPPHandler
                 return -1;
         }
 
-        mutex::scoped_lock lk(djLock);
+        mutex::scoped_lock lk(getDJLock(uniqueID));
 
         for (i = 0; i < bppv->get().size(); i++)
         {
@@ -1627,7 +1652,7 @@ struct BPPHandler
             return -1;
         }
 
-        mutex::scoped_lock lk(djLock);
+        mutex::scoped_lock lk(getDJLock(uniqueID));
         mutex::scoped_lock scoped(bppLock);
 
         bppKeysIt = std::find(bppKeys.begin(), bppKeys.end(), uniqueID);
@@ -1662,7 +1687,13 @@ struct BPPHandler
             bs.rewind();
 
             if (posix_time::second_clock::universal_time() > dieTime)
+            {
+                // XXXPAT: do we want this to fall through and delete jobs for this uniqueID?
+                // is is possible for there to be any?
+                lk.unlock();
+                deleteDJLock(uniqueID);
                 return 0;
+            }
             else
                 return -1;
         }
@@ -1678,6 +1709,8 @@ struct BPPHandler
         */
         fPrimitiveServerPtr->getProcessorThreadPool()->removeJobs(uniqueID);
         OOBPool->removeJobs(uniqueID);
+        lk.unlock();
+        deleteDJLock(uniqueID);
         return 0;
     }
 
