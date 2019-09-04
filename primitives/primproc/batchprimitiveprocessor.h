@@ -255,7 +255,7 @@ private:
     bool doJoin;
     uint32_t joinerSize;
     uint16_t preJoinRidCount;
-    boost::mutex addToJoinerLock;
+    boost::scoped_array<boost::mutex> addToJoinerLocks;
     void executeJoin();
 
 // 		uint32_t ridsIn, ridsOut;

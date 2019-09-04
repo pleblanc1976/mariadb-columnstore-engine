@@ -255,6 +255,7 @@ void BatchPrimitiveProcessor::initBPP(ByteStream& bs)
             tJoiners.reset(new boost::shared_ptr<TJoiner>[joinerCount]);
             _pools.reset(new boost::shared_ptr<utils::SimplePool>[joinerCount]);
             tlJoiners.reset(new boost::shared_ptr<TLJoiner>[joinerCount]);
+            addToJoinerLocks.reset(new boost::mutex[joinerCount]);
             tJoinerSizes.reset(new uint32_t[joinerCount]);
             largeSideKeyColumns.reset(new uint32_t[joinerCount]);
             tlLargeSideKeyColumns.reset(new vector<uint32_t>[joinerCount]);
@@ -516,9 +517,6 @@ void BatchPrimitiveProcessor::resetBPP(ByteStream& bs, const SP_UM_MUTEX& w,
 void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
 {
     uint32_t count, i, joinerNum, tlIndex, startPos;
-    joblist::ElementType* et;
-    TypelessData tlLargeKey;
-    uint8_t nullFlag;
 
 #pragma pack(push,1)
     struct JoinerElements
@@ -528,7 +526,6 @@ void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
     } *arr;
 #pragma pack(pop)
 
-    addToJoinerLock.lock();
     /* skip the header */
     bs.advance(sizeof(ISMPacketHeader) + 3 * sizeof(uint32_t));
 
@@ -540,8 +537,55 @@ void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
         bs >> joinerNum;
         idbassert(joinerNum < joinerCount);
         arr = (JoinerElements*) bs.buf();
-
-// 		cout << "reading " << count << " elements from the bs, joinerNum is " << joinerNum << "\n";
+        
+        uint32_t &tJoinerSize = tJoinerSizes[joinerNum];
+        
+        mutex::scoped_lock(addToJoinerLocks[joinerNum]);
+        if (typelessJoin[joinerNum])
+        {
+            TypelessData tlLargeKey;
+            uint8_t nullFlag;
+            TLJoiner *tlJoiner = tlJoiners[joinerNum].get();
+            PoolAllocator &storedKeyAllocator = storedKeyAllocators[joinerNum];
+        
+            for (i = 0; i < count; i++)
+            {
+                bs >> nullFlag;
+                if (nullFlag == 0)
+                {
+                    tlLargeKey.deserialize(bs, storedKeyAllocator);
+                    bs >> tlIndex;
+                    tlJoiner->insert(make_pair(tlLargeKey, tlIndex));
+                }
+                else
+                    --tJoinerSize;
+            }
+        }
+        else
+        {
+            TJoiner *tJoiner = tJoiners[joinerNum].get();
+            uint64_t nullValue = joinNullValues[joinerNum];
+            bool &l_doMatchNulls = doMatchNulls[joinerNum];
+            joblist::JoinType joinType = joinTypes[joinerNum];
+            
+            if (joinType & MATCHNULLS)
+            {
+                for (i = 0; i < count; ++i)
+                {
+                    /* A minor optimization: the matchnull logic should only be used with
+                     * the jointype specifies it and there's a null value in the small side */
+                    if (!l_doMatchNulls && arr[i].key == nullValue)
+                        l_doMatchNulls = true;
+                    tJoiner->insert(make_pair(arr[i].key, arr[i].value));
+                }
+            }
+            else
+                for (i = 0; i < count; ++i)
+                    tJoiner->insert(make_pair(arr[i].key, arr[i].value));
+        }
+        
+        #if 0
+ 		//cout << "reading " << count << " elements from the bs, joinerNum is " << joinerNum << "\n";
         for (i = 0; i < count; i++)
         {
             if (typelessJoin[joinerNum])
@@ -552,8 +596,7 @@ void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
                 {
                     tlLargeKey.deserialize(bs, storedKeyAllocators[joinerNum]);
                     bs >> tlIndex;
-                    tlJoiners[joinerNum]->insert(pair<TypelessData, uint32_t>(tlLargeKey,
-                                                 tlIndex));
+                    tlJoiners[joinerNum]->insert(make_pair(tlLargeKey, tlIndex));
                 }
                 else
                     tJoinerSizes[joinerNum]--;
@@ -568,19 +611,13 @@ void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
                 tJoiners[joinerNum]->insert(pair<const uint64_t, uint32_t>(arr[i].key, arr[i].value));
             }
         }
+        #endif
 
         if (!typelessJoin[joinerNum])
             bs.advance(count * sizeof(JoinerElements));
 
         if (getTupleJoinRowGroupData)
         {
-// 			cout << "copying full row data for joiner " << joinerNum << endl;
-            /* Need to update this assertion if there's a typeless join.  search
-            for nullFlag. */
-// 			idbassert(ssrdPos[joinerNum] + (count * smallSideRowLengths[joinerNum]) <=
-// 				smallSideRGs[joinerNum].getEmptySize() +
-// 				(smallSideRowLengths[joinerNum] * tJoinerSizes[joinerNum]));
-
             RowGroup& smallSide = smallSideRGs[joinerNum];
             RGData offTheWire;
 
@@ -589,8 +626,6 @@ void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
             offTheWire.deserialize(bs);
             smallSide.setData(&smallSideRowData[joinerNum]);
             smallSide.append(offTheWire, startPos);
-
-            //ssrdPos[joinerNum] += count;
 
             /*  This prints the row data
             			smallSideRGs[joinerNum].initRow(&r);
@@ -603,8 +638,9 @@ void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
     }
     else
     {
-        et = (joblist::ElementType*) bs.buf();
+        joblist::ElementType *et = (joblist::ElementType*) bs.buf();
 
+        mutex::scoped_lock(addToJoinerLocks[0]);
         for (i = 0; i < count; i++)
         {
 // 			cout << "BPP: adding <" << et[i].first << ", " << et[i].second << "> to Joiner\n";
@@ -615,7 +651,6 @@ void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
     }
 
     idbassert(bs.length() == 0);
-    addToJoinerLock.unlock();
 }
 
 int BatchPrimitiveProcessor::endOfJoiner()
@@ -623,7 +658,8 @@ int BatchPrimitiveProcessor::endOfJoiner()
     /* Wait for all joiner elements to be added */
     uint32_t i;
 
-    boost::mutex::scoped_lock scoped(addToJoinerLock);
+    // it should be safe to run this without grabbing this lock
+    //boost::mutex::scoped_lock scoped(addToJoinerLock);
 
     if (endOfJoinerRan)
         return 0;
