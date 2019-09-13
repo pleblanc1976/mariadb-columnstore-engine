@@ -71,6 +71,7 @@ public:
 
 private:
     void newBlock();
+    void *allocOOB(uint64_t size);
 
     unsigned allocSize;
     std::vector<boost::shared_array<uint8_t> > mem;
@@ -87,6 +88,25 @@ private:
     typedef std::map<void*, OOBMemInfo> OutOfBandMap;
     OutOfBandMap oob;  // for mem chunks bigger than the window size; these can be dealloc'd
 };
+
+
+
+inline void* PoolAllocator::allocate(uint64_t size)
+{
+    void *ret;
+
+    if (size > allocSize)
+        return allocOOB(size);
+
+    if (size > capacityRemaining)
+        newBlock();
+
+    ret = (void*) nextAlloc;
+    nextAlloc += size;
+    capacityRemaining -= size;
+    memUsage += size;
+    return ret;
+}
 
 }
 

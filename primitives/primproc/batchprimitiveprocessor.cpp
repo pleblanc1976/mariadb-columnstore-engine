@@ -253,7 +253,7 @@ void BatchPrimitiveProcessor::initBPP(ByteStream& bs)
 // 			cout << "joinerCount = " << joinerCount << endl;
             joinTypes.reset(new JoinType[joinerCount]);
             tJoiners.reset(new boost::shared_ptr<TJoiner>[joinerCount]);
-            _pools.reset(new boost::shared_ptr<utils::SimplePool>[joinerCount]);
+            //_pools.reset(new boost::shared_ptr<utils::SimplePool>[joinerCount]);
             tlJoiners.reset(new boost::shared_ptr<TLJoiner>[joinerCount]);
             addToJoinerLocks.reset(new boost::mutex[joinerCount]);
             tJoinerSizes.reset(new uint32_t[joinerCount]);
@@ -292,9 +292,9 @@ void BatchPrimitiveProcessor::initBPP(ByteStream& bs)
                     bs >> joinNullValues[i];
                     bs >> largeSideKeyColumns[i];
                     //cout << "large side key is " << largeSideKeyColumns[i] << endl;
-                    _pools[i].reset(new utils::SimplePool());
-                    utils::SimpleAllocator<pair<uint64_t const, uint32_t> > alloc(_pools[i]);
-                    tJoiners[i].reset(new TJoiner(10, TupleJoiner::hasher(), equal_to<uint64_t>(), alloc));
+                    //_pools[i].reset(new utils::SimplePool());
+                    //utils::SimpleAllocator<pair<uint64_t const, uint32_t> > alloc(_pools[i]);
+                    tJoiners[i].reset(new TJoiner(10, TupleJoiner::hasher())); //, equal_to<uint64_t>(), alloc));
                 }
                 else
                 {
@@ -517,7 +517,6 @@ void BatchPrimitiveProcessor::resetBPP(ByteStream& bs, const SP_UM_MUTEX& w,
 void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
 {
     uint32_t count, i, joinerNum, tlIndex, startPos;
-
 #pragma pack(push,1)
     struct JoinerElements
     {
@@ -540,7 +539,7 @@ void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
         
         uint32_t &tJoinerSize = tJoinerSizes[joinerNum];
         
-        mutex::scoped_lock(addToJoinerLocks[joinerNum]);
+        mutex::scoped_lock lk(addToJoinerLocks[joinerNum]);
         if (typelessJoin[joinerNum])
         {
             TypelessData tlLargeKey;
@@ -2243,7 +2242,7 @@ SBPP BatchPrimitiveProcessor::duplicate()
             bpp->joinTypes = joinTypes;
             bpp->largeSideKeyColumns = largeSideKeyColumns;
             bpp->tJoiners = tJoiners;
-            bpp->_pools = _pools;
+            //bpp->_pools = _pools;
             bpp->typelessJoin = typelessJoin;
             bpp->tlLargeSideKeyColumns = tlLargeSideKeyColumns;
             bpp->tlJoiners = tlJoiners;

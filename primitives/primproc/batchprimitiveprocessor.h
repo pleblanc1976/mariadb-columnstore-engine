@@ -281,10 +281,12 @@ private:
     /* Rowgroups + join */
     typedef std::tr1::unordered_multimap<uint64_t, uint32_t,
             joiner::TupleJoiner::hasher, std::equal_to<uint64_t>,
-            utils::SimpleAllocator<std::pair<const uint64_t, uint32_t> > > TJoiner;
-
+            //utils::SimpleAllocator<std::pair<const uint64_t, uint32_t> > > TJoiner;
+            utils::STLPoolAllocator<std::pair<const uint64_t, uint32_t> > > TJoiner;
+            
     typedef std::tr1::unordered_multimap<joiner::TypelessData,
-            uint32_t, joiner::TupleJoiner::hasher> TLJoiner;
+            uint32_t, joiner::TupleJoiner::hasher, std::equal_to<joiner::TypelessData>,
+            utils::STLPoolAllocator<std::pair<const joiner::TypelessData, uint32_t> > > TLJoiner;
 
     bool generateJoinedRowGroup(rowgroup::Row& baseRow, const uint32_t depth = 0);
     /* generateJoinedRowGroup helper fcns & vars */
@@ -342,7 +344,7 @@ private:
     rowgroup::RowGroup fAggregateRG;
     rowgroup::RGData fAggRowGroupData;
     //boost::scoped_array<uint8_t> fAggRowGroupData;
-    boost::shared_array<boost::shared_ptr<utils::SimplePool> > _pools;
+    //boost::shared_array<boost::shared_ptr<utils::SimplePool> > _pools;
 
     /* OR hacks */
     uint8_t bop;   // BOP_AND or BOP_OR
