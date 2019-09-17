@@ -1278,7 +1278,7 @@ struct BPPHandler
     // threads lying around
     std::vector<uint32_t> bppKeys;
     std::vector<uint32_t>::iterator bppKeysIt;
-
+    
     ~BPPHandler()
     {
         mutex::scoped_lock scoped(bppLock);
@@ -1451,7 +1451,7 @@ struct BPPHandler
         // make the new BPP object
         bppv.reset(new BPPV());
         bpp.reset(new BatchPrimitiveProcessor(bs, fPrimitiveServerPtr->prefetchThreshold(),
-                                              bppv->getSendThread()));
+                                              bppv->getSendThread(), fPrimitiveServerPtr->ProcessorThreads()));
 
         if (bs.length() > 0)
             bs >> initMsgsLeft;
@@ -1613,7 +1613,8 @@ struct BPPHandler
         }
 
         unique_lock<shared_mutex> lk(getDJLock(uniqueID));
-
+        bppv->get()[0]->doneSendingJoinerData();
+        
         for (i = 0; i < bppv->get().size(); i++)
         {
             err = bppv->get()[i]->endOfJoiner();
