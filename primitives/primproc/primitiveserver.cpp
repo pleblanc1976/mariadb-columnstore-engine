@@ -1613,7 +1613,7 @@ struct BPPHandler
         }
 
         unique_lock<shared_mutex> lk(getDJLock(uniqueID));
-        bppv->get()[0]->doneSendingJoinerData();
+        
         
         for (i = 0; i < bppv->get().size(); i++)
         {
@@ -1627,6 +1627,7 @@ struct BPPHandler
                     return -1;
             }
         }
+        bppv->get()[0]->doneSendingJoinerData();
 
         /* Note: some of the duplicate/run/join sync was moved to the BPPV class to do
         more intelligent scheduling.  Once the join data is received, BPPV will

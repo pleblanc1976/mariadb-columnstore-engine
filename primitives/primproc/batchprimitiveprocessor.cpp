@@ -109,7 +109,9 @@ BatchPrimitiveProcessor::BatchPrimitiveProcessor() :
     prefetchThreshold(0),
     hasDictStep(false),
     sockIndex(0),
-    endOfJoinerRan(false)
+    endOfJoinerRan(false),
+    processorThreads(0),
+    firstInstance(false)
 {
     pp.setLogicalBlockMode(true);
     pp.setBlockPtr((int*) blockData);
@@ -151,7 +153,8 @@ BatchPrimitiveProcessor::BatchPrimitiveProcessor(ByteStream& b, double prefetch,
     hasDictStep(false),
     sockIndex(0),
     endOfJoinerRan(false),
-    processorThreads(_processorThreads)
+    processorThreads(_processorThreads),
+    firstInstance(true)
 {
     pp.setLogicalBlockMode(true);
     pp.setBlockPtr((int*) blockData);
@@ -530,9 +533,10 @@ void BatchPrimitiveProcessor::resetBPP(ByteStream& bs, const SP_UM_MUTEX& w,
 
 void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
 {
+    idbassert(processorThreads != 0);
     if (firstCallTime.is_not_a_date_time())
         firstCallTime = boost::posix_time::microsec_clock::universal_time();
-
+        
     uint32_t count, i, joinerNum, tlIndex, startPos, bucket;
 #pragma pack(push,1)
     struct JoinerElements
@@ -754,6 +758,15 @@ int BatchPrimitiveProcessor::endOfJoiner()
 
     if (endOfJoinerRan)
         return 0;
+    
+    // minor hack / optimization.  The instances not inserting the table data don't
+    // need to check that the table is complete.
+    if (!firstInstance)
+    {
+        endOfJoinerRan = true;
+        pthread_mutex_unlock(&objLock);
+        return 0;
+    }
 
     if (ot == ROW_GROUP)
         for (i = 0; i < joinerCount; i++)
@@ -767,7 +780,11 @@ int BatchPrimitiveProcessor::endOfJoiner()
                     else
                         currentSize += tJoiners[i][j]->size();
                 if (currentSize != tJoinerSizes[i])
+                {
+                    cout << "EOJ " << i << " bailing b/c currentsize = " << currentSize << " joinersize = " <<
+                        tJoinerSizes[i] << endl;
                     return -1;
+                }
                 //if ((!tJoiners[i] || tJoiners[i]->size() != tJoinerSizes[i]))
                 //    return -1;
             }
@@ -780,7 +797,11 @@ int BatchPrimitiveProcessor::endOfJoiner()
                     else
                         currentSize += tlJoiners[i][j]->size();
                 if (currentSize != tJoinerSizes[i])
+                {
+                    cout << "EOJ TL " << i << " bailing b/c currentsize = " << currentSize << " joinersize = " <<
+                        tJoinerSizes[i] << endl;
                     return -1;
+                }
                 //if ((!tJoiners[i] || tlJoiners[i]->size() != tJoinerSizes[i]))
                 //    return -1;
             }
@@ -2319,6 +2340,7 @@ SBPP BatchPrimitiveProcessor::duplicate()
     bpp->bop = bop;
     bpp->hasPassThru = hasPassThru;
     bpp->forHJ = forHJ;
+    bpp->processorThreads = processorThreads;
 
     if (ot == ROW_GROUP)
     {

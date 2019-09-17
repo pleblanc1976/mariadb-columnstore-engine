@@ -398,6 +398,7 @@ private:
     utils::Hasher_r bucketPicker;
     const uint32_t bpSeed = 0xf22df448;   // an arbitrary random #
     uint processorThreads;
+    bool firstInstance;
     
     friend class Command;
     friend class ColumnCommand;
