@@ -276,7 +276,11 @@ void BatchPrimitiveProcessor::initBPP(ByteStream& bs)
             tlLargeSideKeyColumns.reset(new vector<uint32_t>[joinerCount]);
             typelessJoin.reset(new bool[joinerCount]);
             tlKeyLengths.reset(new uint32_t[joinerCount]);
+
             storedKeyAllocators.reset(new PoolAllocator[joinerCount]);
+            for (uint j = 0; j < joinerCount; ++j)
+                storedKeyAllocators[j].setUseLock(true);
+            
             joinNullValues.reset(new uint64_t[joinerCount]);
             doMatchNulls.reset(new bool[joinerCount]);
             joinFEFilters.reset(new scoped_ptr<FuncExpWrapper>[joinerCount]);
@@ -2684,7 +2688,7 @@ inline void BatchPrimitiveProcessor::getJoinResults(const Row& r, uint32_t jInde
                 
         if (doMatchNulls[jIndex])     // add the nulls to the match list
         {
-            bucket = bucketPicker((char *) &joinNullValues[jIndex], 8, bpSeed);
+            bucket = bucketPicker((char *) &joinNullValues[jIndex], 8, bpSeed) % processorThreads;
             range = tJoiners[jIndex][bucket]->equal_range(joinNullValues[jIndex]);
             for (; range.first != range.second; ++range.first)
                 v.push_back(range.first->second);
