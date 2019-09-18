@@ -616,7 +616,7 @@ void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
                 }
                 if (!done && !didSomeWork)
                 {
-                    ::usleep(1000 * processorThreads);
+                    ::usleep(500 * processorThreads);
                     ++noWorkCounter;
                 }
             }
@@ -691,7 +691,7 @@ void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
                     }
                     if (!done && !didSomeWork)
                     {
-                        ::usleep(1000 * processorThreads);
+                        ::usleep(500 * processorThreads);
                         ++noWorkCounter;
                     }
                 }
@@ -747,7 +747,7 @@ void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
                     }
                     if (!done && !didSomeWork)
                     {
-                        ::usleep(1000 * processorThreads);
+                        ::usleep(500 * processorThreads);
                         ++noWorkCounter;
                     }
                         
