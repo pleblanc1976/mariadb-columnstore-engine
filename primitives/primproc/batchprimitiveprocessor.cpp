@@ -76,6 +76,19 @@ extern int fCacheCount;
 extern uint32_t connectionsPerUM;
 extern int noVB;
 
+// copied from https://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
+uint nextPowOf2(uint x)
+{
+    x--;
+    x |= x >> 1;
+    x |= x >> 2;
+    x |= x >> 4;
+    x |= x >> 8;
+    x |= x >> 16;
+    x++;
+    return x;
+}
+    
 BatchPrimitiveProcessor::BatchPrimitiveProcessor() :
     ot(BPS_ELEMENT_TYPE),
     txnID(0),
@@ -154,11 +167,15 @@ BatchPrimitiveProcessor::BatchPrimitiveProcessor(ByteStream& b, double prefetch,
     hasDictStep(false),
     sockIndex(0),
     endOfJoinerRan(false),
-    //processorThreads(_processorThreads),
-    processorThreads(32),
-    ptMask(processorThreads - 1),
+    processorThreads(_processorThreads),
+    //processorThreads(32),
+    //ptMask(processorThreads - 1),
     firstInstance(true)
 {
+    // promote processorThreads to next power of 2.  also need to change the name to bucketCount or similar
+    processorThreads = nextPowOf2(processorThreads);
+    ptMask = processorThreads - 1;
+    
     pp.setLogicalBlockMode(true);
     pp.setBlockPtr((int*) blockData);
     sendThread = bppst;
