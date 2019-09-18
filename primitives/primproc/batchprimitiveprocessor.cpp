@@ -111,6 +111,7 @@ BatchPrimitiveProcessor::BatchPrimitiveProcessor() :
     sockIndex(0),
     endOfJoinerRan(false),
     processorThreads(0),
+    ptMask(0),
     firstInstance(false)
 {
     pp.setLogicalBlockMode(true);
@@ -153,7 +154,9 @@ BatchPrimitiveProcessor::BatchPrimitiveProcessor(ByteStream& b, double prefetch,
     hasDictStep(false),
     sockIndex(0),
     endOfJoinerRan(false),
-    processorThreads(_processorThreads),
+    //processorThreads(_processorThreads),
+    processorThreads(32),
+    ptMask(processorThreads - 1),
     firstInstance(true)
 {
     pp.setLogicalBlockMode(true);
@@ -578,19 +581,46 @@ void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
                 {
                     tlLargeKey.deserialize(bs, storedKeyAllocator);
                     bs >> tlIndex;
-                    bucket = bucketPicker((char *) tlLargeKey.data, tlLargeKey.len, bpSeed) % processorThreads;
+                    bucket = bucketPicker((char *) tlLargeKey.data, tlLargeKey.len, bpSeed) & ptMask;
+                    //bucket = bucketPicker((char *) tlLargeKey.data, tlLargeKey.len, bpSeed) % processorThreads;
                     tmpBuckets[bucket].push_back(make_pair(tlLargeKey, tlIndex));
                 }
                 else
                     --tJoinerSize;
             }
             
-            for (i = 0; i < processorThreads; ++i)
+            bool done = false, didSomeWork;
+            uint loopCounter = 0, noWorkCounter = 0;
+            while (!done)
             {
-                mutex::scoped_lock lk(addToJoinerLocks[joinerNum][i]);
-                for (auto &element : tmpBuckets[i])
-                    tlJoiners[joinerNum][i]->insert(element);
+                ++loopCounter;
+                done = true;
+                didSomeWork = false;
+                for (i = 0; i < processorThreads; ++i)
+                {
+                    //mutex::scoped_lock lk(addToJoinerLocks[joinerNum][i]);
+                    if (!tmpBuckets[i].empty())
+                    {
+                        bool gotIt = addToJoinerLocks[joinerNum][i].try_lock();
+                        if (!gotIt)
+                        {
+                            done = false;
+                            continue;
+                        }
+                        for (auto &element : tmpBuckets[i])
+                            tlJoiners[joinerNum][i]->insert(element);
+                        tmpBuckets[i].clear();
+                        addToJoinerLocks[joinerNum][i].unlock();
+                        didSomeWork = true;
+                    }
+                }
+                if (!done && !didSomeWork)
+                {
+                    ::usleep(1000 * processorThreads);
+                    ++noWorkCounter;
+                }
             }
+            //cout << "TL join insert.  Took " << loopCounter << " loops" << endl;
         
             #if 0
             TypelessData tlLargeKey;
@@ -628,16 +658,45 @@ void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
                      * the jointype specifies it and there's a null value in the small side */
                     if (!l_doMatchNulls && arr[i].key == nullValue)
                         l_doMatchNulls = true;
-                    bucket = bucketPicker((char *) &arr[i].key, 8, bpSeed) % processorThreads;
+                    bucket = bucketPicker((char *) &arr[i].key, 8, bpSeed) & ptMask;
+                    //bucket = bucketPicker((char *) &arr[i].key, 8, bpSeed) % processorThreads;
                     tmpBuckets[bucket].push_back(make_pair(arr[i].key, arr[i].value));
                 }
                 
-                for (i = 0; i < processorThreads; ++i)
+
+                bool done = false, didSomeWork;
+                uint loopCounter = 0, noWorkCounter = 0;
+                while (!done)
                 {
-                    mutex::scoped_lock lk(addToJoinerLocks[joinerNum][i]);
-                    for (auto &element : tmpBuckets[i])
-                        tJoiner[i]->insert(element);
+                    ++loopCounter;
+                    done = true;
+                    didSomeWork = false;
+                    for (i = 0; i < processorThreads; ++i)
+                    {
+                        //mutex::scoped_lock lk(addToJoinerLocks[joinerNum][i]);
+                        if (!tmpBuckets[i].empty())
+                        {
+                            bool gotIt = addToJoinerLocks[joinerNum][i].try_lock();
+                            if (!gotIt)
+                            {
+                                done = false;
+                                continue;
+                            }
+                            for (auto &element : tmpBuckets[i])
+                                tJoiners[joinerNum][i]->insert(element);
+                            tmpBuckets[i].clear();
+                            addToJoinerLocks[joinerNum][i].unlock();
+                            didSomeWork = true;
+                        }
+                    }
+                    if (!done && !didSomeWork)
+                    {
+                        ::usleep(1000 * processorThreads);
+                        ++noWorkCounter;
+                    }
                 }
+                
+                //cout << "T numeric join insert.  Took " << loopCounter << " loops" << endl;
             
                 #if 0
                 for (i = 0; i < count; ++i)
@@ -654,17 +713,48 @@ void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
             {
                 for (i = 0; i < count; ++i)
                 {
-                    bucket = bucketPicker((char *) &arr[i].key, 8, bpSeed) % processorThreads;
+                    bucket = bucketPicker((char *) &arr[i].key, 8, bpSeed) & ptMask;
+                    //bucket = bucketPicker((char *) &arr[i].key, 8, bpSeed) % processorThreads;
                     tmpBuckets[bucket].push_back(make_pair(arr[i].key, arr[i].value));
                 }
-                for (i = 0; i < processorThreads; ++i)
+                
+                bool done = false;
+                bool didSomeWork;
+                uint loopCounter = 0;
+                uint noWorkCounter = 0;
+                while (!done)
                 {
-                    mutex::scoped_lock lk(addToJoinerLocks[joinerNum][i]);
-                    for (auto &element : tmpBuckets[i])
-                        tJoiner[i]->insert(element);
+                    ++loopCounter;
+                    done = true;
+                    didSomeWork = false;
+                    for (i = 0; i < processorThreads; ++i)
+                    {
+                        //mutex::scoped_lock lk(addToJoinerLocks[joinerNum][i]);
+                        if (!tmpBuckets[i].empty())
+                        {
+                            bool gotIt = addToJoinerLocks[joinerNum][i].try_lock();
+                            if (!gotIt)
+                            {
+                                done = false;
+                                continue;
+                            }
+                            for (auto &element : tmpBuckets[i])
+                                tJoiners[joinerNum][i]->insert(element);
+                            tmpBuckets[i].clear();
+                            addToJoinerLocks[joinerNum][i].unlock();
+                            didSomeWork = true;
+                        }
+                    }
+                    if (!done && !didSomeWork)
+                    {
+                        ::usleep(1000 * processorThreads);
+                        ++noWorkCounter;
+                    }
+                        
                 }
+                //cout << "T numeric join insert 2.  Took " << loopCounter << " loops," << 
+                //    " unproductive iterations = " << noWorkCounter << endl;
             }
-            
                 //for (i = 0; i < count; ++i)
                 //    tJoiner->insert(make_pair(arr[i].key, arr[i].value));
         }
@@ -1160,7 +1250,8 @@ void BatchPrimitiveProcessor::executeTupleJoin()
                     largeKey = oldRow.getUintField(colIndex);
                 else
                     largeKey = oldRow.getIntField(colIndex);
-                uint bucket = bucketPicker((char *) &largeKey, 8, bpSeed) % processorThreads;
+                uint bucket = bucketPicker((char *) &largeKey, 8, bpSeed) & ptMask;
+                //uint bucket = bucketPicker((char *) &largeKey, 8, bpSeed) % processorThreads;
                     
                 found = (tJoiners[j][bucket]->find(largeKey) != tJoiners[j][bucket]->end());
                 isNull = oldRow.isNullValue(colIndex);
@@ -1186,7 +1277,8 @@ void BatchPrimitiveProcessor::executeTupleJoin()
                 // the null values are not sent by UM in typeless case.  null -> !found
                 tlLargeKey = makeTypelessKey(oldRow, tlLargeSideKeyColumns[j], tlKeyLengths[j],
                                              &tmpKeyAllocators[j]);
-                uint bucket = bucketPicker((char *) tlLargeKey.data, tlLargeKey.len, bpSeed) % processorThreads;
+                uint bucket = bucketPicker((char *) tlLargeKey.data, tlLargeKey.len, bpSeed) & ptMask;
+                //uint bucket = bucketPicker((char *) tlLargeKey.data, tlLargeKey.len, bpSeed) % processorThreads;
                 found = tlJoiners[j][bucket]->find(tlLargeKey) != tlJoiners[j][bucket]->end();
 
                 if ((!found && !(joinTypes[j] & (LARGEOUTER | ANTI))) ||
@@ -2345,7 +2437,8 @@ SBPP BatchPrimitiveProcessor::duplicate()
     bpp->hasPassThru = hasPassThru;
     bpp->forHJ = forHJ;
     bpp->processorThreads = processorThreads;
-
+    bpp->ptMask = processorThreads - 1;
+    
     if (ot == ROW_GROUP)
     {
         bpp->outputRG = outputRG;
@@ -2681,14 +2774,16 @@ inline void BatchPrimitiveProcessor::getJoinResults(const Row& r, uint32_t jInde
             largeKey = r.getIntField(colIndex);
         }
         
-        bucket = bucketPicker((char *) &largeKey, 8, bpSeed) % processorThreads; 
+        bucket = bucketPicker((char *) &largeKey, 8, bpSeed) & ptMask; 
+        //bucket = bucketPicker((char *) &largeKey, 8, bpSeed) % processorThreads; 
         pair<TJoiner::iterator, TJoiner::iterator> range = tJoiners[jIndex][bucket]->equal_range(largeKey);
         for (; range.first != range.second; ++range.first)
             v.push_back(range.first->second);
                 
         if (doMatchNulls[jIndex])     // add the nulls to the match list
         {
-            bucket = bucketPicker((char *) &joinNullValues[jIndex], 8, bpSeed) % processorThreads;
+            bucket = bucketPicker((char *) &joinNullValues[jIndex], 8, bpSeed) & ptMask;
+            //bucket = bucketPicker((char *) &joinNullValues[jIndex], 8, bpSeed) % processorThreads;
             range = tJoiners[jIndex][bucket]->equal_range(joinNullValues[jIndex]);
             for (; range.first != range.second; ++range.first)
                 v.push_back(range.first->second);
@@ -2722,7 +2817,8 @@ inline void BatchPrimitiveProcessor::getJoinResults(const Row& r, uint32_t jInde
         TypelessData largeKey = makeTypelessKey(r, tlLargeSideKeyColumns[jIndex],
                                                 tlKeyLengths[jIndex], &tmpKeyAllocators[jIndex]);
         pair<TLJoiner::iterator, TLJoiner::iterator> range;
-        bucket = bucketPicker((char *) largeKey.data, largeKey.len, bpSeed) % processorThreads;
+        bucket = bucketPicker((char *) largeKey.data, largeKey.len, bpSeed) & ptMask;
+        //bucket = bucketPicker((char *) largeKey.data, largeKey.len, bpSeed) % processorThreads;
         range = tlJoiners[jIndex][bucket]->equal_range(largeKey);
         for (; range.first != range.second; ++range.first)
             v.push_back(range.first->second);
