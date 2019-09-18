@@ -626,7 +626,8 @@ void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
                         }
                         for (auto &element : tmpBuckets[i])
                             tlJoiners[joinerNum][i]->insert(element);
-                        tmpBuckets[i].clear();
+                        vector<pair<TypelessData, uint32_t> > empty;
+                        tmpBuckets[i].swap(empty);
                         addToJoinerLocks[joinerNum][i].unlock();
                         didSomeWork = true;
                     }
@@ -701,7 +702,8 @@ void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
                             }
                             for (auto &element : tmpBuckets[i])
                                 tJoiners[joinerNum][i]->insert(element);
-                            tmpBuckets[i].clear();
+                            vector<pair<uint64_t, uint32_t> > empty;
+                            tmpBuckets[i].swap(empty);
                             addToJoinerLocks[joinerNum][i].unlock();
                             didSomeWork = true;
                         }
@@ -757,7 +759,8 @@ void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
                             }
                             for (auto &element : tmpBuckets[i])
                                 tJoiners[joinerNum][i]->insert(element);
-                            tmpBuckets[i].clear();
+                            vector<pair<uint64_t, uint32_t> > empty;
+                            tmpBuckets[i].swap(empty);
                             addToJoinerLocks[joinerNum][i].unlock();
                             didSomeWork = true;
                         }
