@@ -82,7 +82,7 @@ TupleJoiner::TupleJoiner(
         _pool.reset(new boost::shared_ptr<PoolAllocator>[bucketCount]);
         for (i = 0; i < bucketCount; i++)
         {
-            STLPoolAllocator<pair<const int64_t, uint8_t*> > alloc;
+            STLPoolAllocator<uint8_t*> alloc;
             _pool[i] = alloc.getPoolAllocator();
             h[i].reset(new hash_t(10, hasher(), hash_t::key_equal(), alloc));
         }
@@ -1712,5 +1712,28 @@ void TupleJoiner::setConvertToDiskJoin()
 {
     _convertToDiskJoin = true;
 }
+
+
+struct JoinHasher {
+    JoinHasher(const rowgroup::Row &r, int keyCol);
+    uint64_t operator()(const uint8_t *) const;
+    Hasher hasher;
+    rowgroup::Row row;
+    int _keyCol;
+}
+
+JoinHasher::JoinHasher(const Row &r, int keyCol) : row(r), _keyCol(keyCol)
+{
+}
+
+inline uint64_t JoinHasher::operator()(const uint8_t *) const
+{
+    if (row.isUnsigned(_keyCol))
+        return hasher((char *) &row.getUIntField(_keyCol), 8);
+    else
+        return hasher((char *) &row.getIntField(_keyCol), 8);
+}
+
+
 
 };

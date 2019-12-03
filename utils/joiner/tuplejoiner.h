@@ -344,8 +344,26 @@ public:
     void setConvertToDiskJoin();
 
 private:
-    typedef std::tr1::unordered_multimap<int64_t, uint8_t*, hasher, std::equal_to<int64_t>,
-            utils::STLPoolAllocator<std::pair<const int64_t, uint8_t*> > > hash_t;
+    //typedef std::tr1::unordered_multimap<int64_t, uint8_t*, hasher, std::equal_to<int64_t>,
+    //        utils::STLPoolAllocator<std::pair<const int64_t, uint8_t*> > > hash_t;
+    struct JoinHasher {
+        JoinHasher(const rowgroup::Row &r, int keyCol);
+        uint64_t operator()(const uint8_t *) const;
+        Hasher hasher;
+        rowgroup::Row row;
+        int _keyCol;
+    }
+
+    struct JoinComparator {
+        JoinComparator(const rowgroup::Row &r, int keyCol);
+        bool operator()(const uint8_t *) const;
+        rowgroup::Row row;
+        int _keyCol;
+    }
+
+    typedef std::tr1::unordered_multiset<uint8_t*, JoinHasher, JoinComparator,
+            utils::STLPoolAllocator<uint8_t* > > hash_t;
+
     typedef std::tr1::unordered_multimap<int64_t, rowgroup::Row::Pointer, hasher, std::equal_to<int64_t>,
             utils::STLPoolAllocator<std::pair<const int64_t, rowgroup::Row::Pointer> > > sthash_t;
     typedef std::tr1::unordered_multimap<TypelessData, rowgroup::Row::Pointer, hasher, std::equal_to<TypelessData>,
