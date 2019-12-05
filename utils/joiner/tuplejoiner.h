@@ -29,6 +29,7 @@
 #include <unordered_map>
 #else
 #include <tr1/unordered_map>
+#include <unordered_set>
 #endif
 
 #include "rowgroup.h"
@@ -347,21 +348,25 @@ private:
     //typedef std::tr1::unordered_multimap<int64_t, uint8_t*, hasher, std::equal_to<int64_t>,
     //        utils::STLPoolAllocator<std::pair<const int64_t, uint8_t*> > > hash_t;
     struct JoinHasher {
-        JoinHasher(const rowgroup::Row &r, int keyCol);
+        JoinHasher(const rowgroup::Row &smallRow, const rowgroup::Row &largeRow,
+            int smallKeyCol, int largeKeyCol);
         uint64_t operator()(const uint8_t *) const;
-        Hasher hasher;
-        rowgroup::Row row;
-        int _keyCol;
-    }
+        utils::Hasher h;
+        mutable rowgroup::Row smallRow, largeRow;
+        int smallKeyCol, largeKeyCol;
+        int64_t nullValueForJoinColumn;
+        uint32_t nullHash;
+    };
 
     struct JoinComparator {
-        JoinComparator(const rowgroup::Row &r, int keyCol);
-        bool operator()(const uint8_t *) const;
-        rowgroup::Row row;
-        int _keyCol;
-    }
+        JoinComparator(const rowgroup::Row &smallRow, const rowgroup::Row &largeRow,
+            int smallKeyCol, int largeKeyCol);
+        bool operator()(const uint8_t *, const uint8_t *) const;
+        mutable rowgroup::Row smallRow1, smallRow2, largeRow1, largeRow2;
+        int smallKeyCol, largeKeyCol;
+    };
 
-    typedef std::tr1::unordered_multiset<uint8_t*, JoinHasher, JoinComparator,
+    typedef std::unordered_multiset<uint8_t*, JoinHasher, JoinComparator,
             utils::STLPoolAllocator<uint8_t* > > hash_t;
 
     typedef std::tr1::unordered_multimap<int64_t, rowgroup::Row::Pointer, hasher, std::equal_to<int64_t>,
@@ -423,8 +428,7 @@ private:
     /* semi-join vars & fcns */
     boost::shared_ptr<funcexp::FuncExpWrapper> fe;
     boost::scoped_array<funcexp::FuncExpWrapper> fes;  // holds X copies of fe, one per thread
-    // this var is only used to normalize the NULL values for single-column joins,
-    // will have to change when/if we need to support that for compound or string joins
+    // this var is used to normalize the NULL values for single-column joins,
     int64_t nullValueForJoinColumn;
 
     /* Runtime casual partitioning support */

@@ -418,10 +418,15 @@ public:
     std::string toCSV() const;
 
     /* These fcns are used only in joins.  The RID doesn't matter on the side that
-    gets hashed.  We steal that field here to "mark" a row. */
+    gets hashed.  We steal that field here to "mark" a row.
+    markRow() and isMarked() are used for outer joins (TODO: change name).
+    markSmallSideRow() and isSmallSideRow() use different bits, and are used
+    to distinguish large/small side rows.
+    */
     inline void markRow();
-    inline void zeroRid();
     inline bool isMarked();
+    inline void markSmallSideRow();
+    inline bool isSmallSideRow();
     void initToNull();
 
     inline void usesStringTable(bool b)
@@ -856,17 +861,22 @@ inline uint64_t Row::getBaseRid() const
 
 inline void Row::markRow()
 {
-    *((uint16_t*) data) = 0xffff;
-}
-
-inline void Row::zeroRid()
-{
-    *((uint16_t*) data) = 0;
+    *((uint16_t*) data) |= 0x0001;
 }
 
 inline bool Row::isMarked()
 {
-    return *((uint16_t*) data) == 0xffff;
+    return *((uint16_t*) data) & 0x0001;
+}
+
+inline void Row::markSmallSideRow()
+{
+    *((uint16_t*) data) = 0x8000;
+}
+
+inline bool Row::isSmallSideRow()
+{
+    return *((uint16_t *) data) & 0x8000;
 }
 
 /* Begin speculative code! */

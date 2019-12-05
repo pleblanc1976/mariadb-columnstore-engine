@@ -80,11 +80,15 @@ TupleJoiner::TupleJoiner(
     {
         h.reset(new boost::scoped_ptr<hash_t>[bucketCount]);
         _pool.reset(new boost::shared_ptr<PoolAllocator>[bucketCount]);
+        Row srow, lrow;
+        smallRG.initRow(&srow);
+        largeRG.initRow(&lrow);
         for (i = 0; i < bucketCount; i++)
         {
             STLPoolAllocator<uint8_t*> alloc;
             _pool[i] = alloc.getPoolAllocator();
-            h[i].reset(new hash_t(10, hasher(), hash_t::key_equal(), alloc));
+            h[i].reset(new hash_t(10, JoinHasher(srow, lrow, smallJoinColumn, largeJoinColumn),
+                JoinComparator(srow, lrow, smallJoinColumn, largeJoinColumn), alloc));
         }
     }
 
@@ -318,7 +322,7 @@ void TupleJoiner::um_insertInlineRows(uint rowCount, Row &r)
 {
     uint i;
     int64_t smallKey;
-    vector<pair<int64_t, uint8_t *> > v[bucketCount];
+    vector<uint8_t *> v[bucketCount];
     uint smallKeyColumn = smallKeyColumns[0];
 
     for (i = 0; i < rowCount; i++, r.nextRow())
@@ -328,10 +332,13 @@ void TupleJoiner::um_insertInlineRows(uint rowCount, Row &r)
         else
             smallKey = (int64_t) r.getUintField(smallKeyColumn);
         uint bucket = bucketPicker((char *) &smallKey, sizeof(smallKey), bpSeed) & bucketMask;
+        v[bucket].push_back(r.getData());
+        /*
         if (UNLIKELY(smallKey == nullValueForJoinColumn))
-            v[bucket].push_back(pair<int64_t, uint8_t*>(getJoinNullValue(), r.getData()));
+            v[bucket].push_back(pair<int64_t,uint8_t*>(getJoinNullValue(), r.getData()));
         else
             v[bucket].push_back(pair<int64_t, uint8_t*>(smallKey, r.getData()));
+        */
     }
     bucketsToTables(&v[0], h.get());
 }
@@ -371,7 +378,7 @@ void TupleJoiner::insertRGData(RowGroup &rg, uint threadID)
     for (i = 0; i < rowCount; i++, r.nextRow())
     {
         updateCPData(r);
-        r.zeroRid();
+        r.markSmallSideRow();
     }
     m_cpValuesLock.unlock();
     rg.getRow(0, &r);
@@ -400,7 +407,7 @@ void TupleJoiner::insert(Row& r, bool zeroTheRid)
     /* when doing a disk-based join, only the first iteration on the large side
     will 'zeroTheRid'.  The successive iterations will need it unchanged. */
     if (zeroTheRid)
-        r.zeroRid();
+        r.markSmallSideRow();
 
     updateCPData(r);
 
@@ -434,10 +441,13 @@ void TupleJoiner::insert(Row& r, bool zeroTheRid)
             else
                 smallKey = (int64_t) r.getUintField(smallKeyColumns[0]);
             uint bucket = bucketPicker((char *) &smallKey, sizeof(smallKey), bpSeed) & bucketMask;
+            h[bucket]->insert(r.getData());
+            /*
             if (UNLIKELY(smallKey == nullValueForJoinColumn))
                 h[bucket]->insert(pair<int64_t, uint8_t*>(getJoinNullValue(), r.getData()));
             else
                 h[bucket]->insert(pair<int64_t, uint8_t*>(smallKey, r.getData()));  // Normal path for integers
+            */
         }
         else
         {
@@ -551,13 +561,13 @@ void TupleJoiner::match(rowgroup::Row& largeSideRow, uint32_t largeRowIndex, uin
             else
             {
                 uint bucket = bucketPicker((char *) &largeKey, sizeof(largeKey), bpSeed) & bucketMask;
-                auto range = h[bucket]->equal_range(largeKey);
+                auto range = h[bucket]->equal_range(largeSideRow.getData());
 
                 if (range.first == range.second && !(joinType & (LARGEOUTER | MATCHNULLS)))
                     return;
 
                 for (; range.first != range.second; ++range.first)
-                    matches->push_back(range.first->second);
+                    matches->push_back(*(range.first));
             }
         }
         else
@@ -595,10 +605,11 @@ void TupleJoiner::match(rowgroup::Row& largeSideRow, uint32_t largeRowIndex, uin
         {
             auto nullVal = getJoinNullValue();
             uint bucket = bucketPicker((char *) &nullVal, sizeof(nullVal), bpSeed) & bucketMask;
-            pair<iterator, iterator> range = h[bucket]->equal_range(nullVal);
+            //pair<iterator, iterator> range = h[bucket]->equal_range(nullVal);
+            pair<iterator, iterator> range = h[bucket]->equal_range(smallNullRow.getData());
 
             for (; range.first != range.second; ++range.first)
-                matches->push_back(range.first->second);
+                matches->push_back(*(range.first));
         }
         else
         {
@@ -631,7 +642,7 @@ void TupleJoiner::match(rowgroup::Row& largeSideRow, uint32_t largeRowIndex, uin
 
                 for (uint i = 0; i < bucketCount; i++)
                     for (it = h[i]->begin(); it != h[i]->end(); ++it)
-                        matches->push_back(it->second);
+                        matches->push_back(*it);
             }
             else
             {
@@ -727,7 +738,7 @@ void TupleJoiner::doneInserting()
             {
                 while (hit == h[bucket]->end())
                     hit = h[++bucket]->begin();
-                smallRow.setPointer(hit->second);
+                smallRow.setPointer(*hit);
                 ++hit;
             }
             else
@@ -1006,10 +1017,10 @@ void TupleJoiner::getUnmarkedRows(vector<Row::Pointer>* out)
             for (uint i = 0; i < bucketCount; i++)
                 for (it = h[i]->begin(); it != h[i]->end(); ++it)
                 {
-                    smallR.setPointer(it->second);
+                    smallR.setPointer(*it);
 
                     if (!smallR.isMarked())
-                        out->push_back(it->second);
+                        out->push_back(*it);
                 }
         }
         else
@@ -1633,6 +1644,14 @@ void TupleJoiner::clearData()
     else
         h.reset(new boost::scoped_ptr<hash_t>[bucketCount]);
 
+    Row srow, lrow;
+    if (!typelessJoin && !smallRG.usesStringTable() &&
+      !smallRG.getColTypes()[smallKeyColumns[0]] == CalpontSystemCatalog::LONGDOUBLE)
+    {
+        smallRG.initRow(&srow);
+        largeRG.initRow(&lrow);
+    }
+
     for (uint i = 0; i < bucketCount; i++)
     {
         STLPoolAllocator<pair<const TypelessData, Row::Pointer> > alloc;
@@ -1644,7 +1663,8 @@ void TupleJoiner::clearData()
         else if (smallRG.usesStringTable())
             sth[i].reset(new sthash_t(10, hasher(), sthash_t::key_equal(), alloc));
         else
-            h[i].reset(new hash_t(10, hasher(), hash_t::key_equal(), alloc));
+            h[i].reset(new hash_t(10, JoinHasher(srow, lrow, smallKeyColumns[0], largeKeyColumns[0]),
+                JoinComparator(srow, lrow, smallKeyColumns[0], largeKeyColumns[0]), alloc));
     }
 
     std::vector<rowgroup::Row::Pointer> empty;
@@ -1713,27 +1733,94 @@ void TupleJoiner::setConvertToDiskJoin()
     _convertToDiskJoin = true;
 }
 
-
-struct JoinHasher {
-    JoinHasher(const rowgroup::Row &r, int keyCol);
-    uint64_t operator()(const uint8_t *) const;
-    Hasher hasher;
-    rowgroup::Row row;
-    int _keyCol;
+TupleJoiner::JoinHasher::JoinHasher(const Row &_smallRow, const Row &_largeRow, int _smallKeyCol,
+    int _largeKeyCol) : smallRow(_smallRow), largeRow(_largeRow), smallKeyCol(_smallKeyCol),
+    largeKeyCol(_largeKeyCol)
+{
+    nullValueForJoinColumn = smallRow.getSignedNullValue(smallKeyCol);
+    nullHash = h((char *) &nullValueForJoinColumn, 8);
 }
 
-JoinHasher::JoinHasher(const Row &r, int keyCol) : row(r), _keyCol(keyCol)
+inline uint64_t TupleJoiner::JoinHasher::operator()(const uint8_t *data) const
 {
-}
+    Row *row;
+    const int *col;
 
-inline uint64_t JoinHasher::operator()(const uint8_t *) const
-{
-    if (row.isUnsigned(_keyCol))
-        return hasher((char *) &row.getUIntField(_keyCol), 8);
+    // figure out if this is a large-side or small-side row
+    largeRow.setData(const_cast<uint8_t *>(data));
+    if (largeRow.isSmallSideRow())
+    {
+        smallRow.setData(const_cast<uint8_t *>(data));
+        row = &smallRow;
+        col = &smallKeyCol;
+    }
     else
-        return hasher((char *) &row.getIntField(_keyCol), 8);
+    {
+        row = &largeRow;
+        col = &largeKeyCol;
+    }
+
+    // do the hashing
+    int64_t key;
+    if (row->isUnsigned(*col))
+        key = (int64_t) row->getUintField(*col);
+    else
+        key = row->getIntField(*col);
+
+    if (key == nullValueForJoinColumn)
+        return nullHash;
+    else
+        return h((char *) &key, 8);
 }
 
+TupleJoiner::JoinComparator::JoinComparator(const Row &_smallRow, const Row &_largeRow, int _smallKeyCol,
+    int _largeKeyCol) : smallRow1(_smallRow), smallRow2(_smallRow), largeRow1(_largeRow),
+    largeRow2(_largeRow), smallKeyCol(_smallKeyCol), largeKeyCol(_largeKeyCol)
+{
+}
 
+inline bool TupleJoiner::JoinComparator::operator()(const uint8_t *data1, const uint8_t *data2) const
+{
+    Row *row1, *row2;
+    const int *col1, *col2;
+
+    // figure out what data1 and data2 refer to
+    largeRow1.setData(const_cast<uint8_t *>(data1));
+    if (largeRow1.isSmallSideRow())
+    {
+        smallRow1.setData(const_cast<uint8_t *>(data1));
+        row1 = &smallRow1;
+        col1 = &smallKeyCol;
+    }
+    else
+    {
+        row1 = &largeRow1;
+        col1 = &largeKeyCol;
+    }
+    largeRow2.setData(const_cast<uint8_t *>(data2));
+    if (largeRow2.isSmallSideRow())
+    {
+        smallRow2.setData(const_cast<uint8_t *>(data2));
+        row2 = &smallRow2;
+        col2 = &smallKeyCol;
+    }
+    else
+    {
+        row2 = &largeRow2;
+        col2 = &largeKeyCol;
+    }
+
+    // get the join values & do the comparison
+    int64_t val1, val2;
+    if (row1->isUnsigned(*col1))
+        val1 = row1->getUintField(*col1);
+    else
+        val1 = row1->getIntField(*col1);
+    if (row2->isUnsigned(*col2))
+        val2 = row2->getUintField(*col2);
+    else
+        val2 = row2->getIntField(*col2);
+    return (val1 == val2);
+}
 
 };
