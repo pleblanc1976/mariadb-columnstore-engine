@@ -87,6 +87,7 @@ TupleJoiner::TupleJoiner(
         {
             STLPoolAllocator<uint8_t*> alloc;
             _pool[i] = alloc.getPoolAllocator();
+            cout << "**** New join thing!" << endl;
             h[i].reset(new hash_t(10, JoinHasher(srow, lrow, smallJoinColumn, largeJoinColumn),
                 JoinComparator(srow, lrow, smallJoinColumn, largeJoinColumn), alloc));
         }
@@ -1813,11 +1814,11 @@ inline bool TupleJoiner::JoinComparator::operator()(const uint8_t *data1, const 
     // get the join values & do the comparison
     int64_t val1, val2;
     if (row1->isUnsigned(*col1))
-        val1 = row1->getUintField(*col1);
+        val1 = (int64_t) row1->getUintField(*col1);
     else
         val1 = row1->getIntField(*col1);
     if (row2->isUnsigned(*col2))
-        val2 = row2->getUintField(*col2);
+        val2 = (int64_t) row2->getUintField(*col2);
     else
         val2 = row2->getIntField(*col2);
     return (val1 == val2);
