@@ -348,21 +348,25 @@ private:
     //typedef std::tr1::unordered_multimap<int64_t, uint8_t*, hasher, std::equal_to<int64_t>,
     //        utils::STLPoolAllocator<std::pair<const int64_t, uint8_t*> > > hash_t;
     struct JoinHasher {
-        JoinHasher(const rowgroup::Row &smallRow, const rowgroup::Row &largeRow,
+        JoinHasher(const rowgroup::RowGroup *smallRG, const rowgroup::RowGroup *largeRG,
             int smallKeyCol, int largeKeyCol);
         uint64_t operator()(const uint8_t *) const;
         utils::Hasher h;
+        const rowgroup::RowGroup *smallRG, *largeRG;
         mutable rowgroup::Row smallRow, largeRow;
+        mutable bool initdRows, forceStringTable;
         int smallKeyCol, largeKeyCol;
-        int64_t nullValueForJoinColumn;
-        uint32_t nullHash;
+        mutable int64_t nullValueForJoinColumn;
+        mutable uint32_t nullHash;
     };
 
     struct JoinComparator {
-        JoinComparator(const rowgroup::Row &smallRow, const rowgroup::Row &largeRow,
+        JoinComparator(const rowgroup::RowGroup *smallRG, const rowgroup::RowGroup *largeRG,
             int smallKeyCol, int largeKeyCol);
         bool operator()(const uint8_t *, const uint8_t *) const;
+        const rowgroup::RowGroup *smallRG, *largeRG;
         mutable rowgroup::Row smallRow1, smallRow2, largeRow1, largeRow2;
+        mutable bool initdRows, forceStringTable;
         int smallKeyCol, largeKeyCol;
     };
 

@@ -428,6 +428,11 @@ public:
     inline void markSmallSideRow();
     inline bool isSmallSideRow();
     void initToNull();
+    inline void forceStringTable()
+    {
+        useStringTable = true;
+        offsets = stOffsets;
+    }
 
     inline void usesStringTable(bool b)
     {
@@ -861,12 +866,12 @@ inline uint64_t Row::getBaseRid() const
 
 inline void Row::markRow()
 {
-    *((uint16_t*) data) |= 0x0001;
+    *((uint16_t*) data) |= 0x4000;
 }
 
 inline bool Row::isMarked()
 {
-    return *((uint16_t*) data) & 0x0001;
+    return *((uint16_t*) data) & 0x4000;
 }
 
 inline void Row::markSmallSideRow()
