@@ -530,6 +530,7 @@ Row& Row::operator=(const Row& r)
     hasLongStringField = r.hasLongStringField;
     sTableThreshold = r.sTableThreshold;
     forceInline = r.forceInline;
+    userDataStore = r.userDataStore;
     return *this;
 }
 
@@ -1619,4 +1620,3 @@ RowGroup RowGroup::truncate(uint32_t cols)
 }
 
 // vim:ts=4 sw=4:
-

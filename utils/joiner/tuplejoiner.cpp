@@ -47,7 +47,7 @@ TupleJoiner::TupleJoiner(
     threadpool::ThreadPool *jsThreadPool) :
     smallRG(smallInput), largeRG(largeInput), joinAlg(INSERTING), joinType(jt),
     threadCount(1), typelessJoin(false), bSignedUnsignedJoin(false), uniqueLimit(100), finished(false),
-    jobstepThreadPool(jsThreadPool), _convertToDiskJoin(false)
+    jobstepThreadPool(jsThreadPool), _convertToDiskJoin(false) //, totalInserted(0)
 {
     uint i;
 
@@ -84,7 +84,7 @@ TupleJoiner::TupleJoiner(
         {
             STLPoolAllocator<uint8_t*> alloc;
             _pool[i] = alloc.getPoolAllocator();
-            cout << "**** New join thing!" << endl;
+            //cout << "**** New join thing!" << endl;
             h[i].reset(new hash_t(10, JoinHasher(&smallRG, &largeRG, smallJoinColumn, largeJoinColumn),
                 JoinComparator(&smallRG, &largeRG, smallJoinColumn, largeJoinColumn), alloc));
         }
@@ -134,7 +134,7 @@ TupleJoiner::TupleJoiner(
     joinType(jt), threadCount(1), typelessJoin(true),
     smallKeyColumns(smallJoinColumns), largeKeyColumns(largeJoinColumns),
     bSignedUnsignedJoin(false), uniqueLimit(100), finished(false),
-    jobstepThreadPool(jsThreadPool), _convertToDiskJoin(false)
+    jobstepThreadPool(jsThreadPool), _convertToDiskJoin(false) //, totalInserted(0)
 {
     uint i;
 
@@ -330,7 +330,7 @@ void TupleJoiner::um_insertInlineRows(uint rowCount, Row &r)
         else
             smallKey = (int64_t) r.getUintField(smallKeyColumn);
         uint bucket = bucketPicker((char *) &smallKey, sizeof(smallKey), bpSeed) & bucketMask;
-        cout << "inserting " << r.toString() << endl;
+        //cout << "inserting " << r.toString() << endl;
         v[bucket].push_back(r.getData());
         /*
         if (UNLIKELY(smallKey == nullValueForJoinColumn))
@@ -369,8 +369,10 @@ void TupleJoiner::insertRGData(RowGroup &rg, uint threadID)
     uint i, rowCount;
     Row r;
 
+    assert(!finished);
     rg.initRow(&r);
     rowCount = rg.getRowCount();
+    //totalInserted += rowCount;
 
     rg.getRow(0, &r);
     m_cpValuesLock.lock();
@@ -440,7 +442,7 @@ void TupleJoiner::insert(Row& r, bool zeroTheRid)
             else
                 smallKey = (int64_t) r.getUintField(smallKeyColumns[0]);
             uint bucket = bucketPicker((char *) &smallKey, sizeof(smallKey), bpSeed) & bucketMask;
-            cout << "old-path inserting " << r.toString() << endl;
+            //cout << "old-path inserting " << r.toString() << endl;
             h[bucket]->insert(r.getData());
             /*
             if (UNLIKELY(smallKey == nullValueForJoinColumn))
@@ -471,6 +473,7 @@ void TupleJoiner::insert(Row& r, bool zeroTheRid)
 void TupleJoiner::match(rowgroup::Row& largeSideRow, uint32_t largeRowIndex, uint32_t threadID,
                         vector<Row::Pointer>* matches)
 {
+    largeSideRow.markLargeSideRow();
     uint32_t i;
     bool isNull = hasNullJoinColumn(largeSideRow);
     matches->clear();
@@ -561,19 +564,19 @@ void TupleJoiner::match(rowgroup::Row& largeSideRow, uint32_t largeRowIndex, uin
             else
             {
                 uint bucket = bucketPicker((char *) &largeKey, sizeof(largeKey), bpSeed) & bucketMask;
-                cout << "match: looking for " << largeSideRow.toString() << endl;
+                //cout << "match: looking for " << largeSideRow.toString() << endl;
                 auto range = h[bucket]->equal_range(largeSideRow.getData());
 
                 if (range.first == range.second && !(joinType & (LARGEOUTER | MATCHNULLS)))
                     return;
 
-                Row tmpRow;
-                smallRG.initRow(&tmpRow);
+                //Row tmpRow;
+                //smallRG.initRow(&tmpRow);
                 for (; range.first != range.second; ++range.first)
                 {
                     matches->push_back(*(range.first));
-                    tmpRow.setData(*(range.first));
-                    cout << "matched row: " << tmpRow.toString() << endl;
+                    //tmpRow.setData(*(range.first));
+                    //cout << "matched row: " << tmpRow.toString() << endl;
                 }
             }
         }
@@ -673,7 +676,7 @@ void TupleJoiner::match(rowgroup::Row& largeSideRow, uint32_t largeRowIndex, uin
 
 void TupleJoiner::doneInserting()
 {
-
+    //cout << "done inserting, size = " << size() << " total inserted = " << totalInserted << endl;
     // a minor textual cleanup
 #ifdef TJ_DEBUG
 #define CHECKSIZE \
@@ -1751,35 +1754,36 @@ inline uint64_t TupleJoiner::JoinHasher::operator()(const uint8_t *data) const
         initdRows = true;
     }
 
-    Row *row;
-    const int *col;
+    Row row;
+    int col;
 
     // figure out if this is a large-side or small-side row
-    largeRow.setData(const_cast<uint8_t *>(data));
-    if (largeRow.isSmallSideRow())
+    //row.setData(const_cast<uint8_t *>(data));
+    if (Row::isSmallSideRow(data))
     {
-        smallRow.setData(const_cast<uint8_t *>(data));
-        row = &smallRow;
-        col = &smallKeyCol;
-        cout << "Hasher: i see a small side row: " << smallRow.toString() << endl;
+        row = smallRow;
+        row.setData(const_cast<uint8_t *>(data));
+        col = smallKeyCol;
+        //cout << "Hasher: i see a small side row: " << smallRow.toString() << endl;
     }
     else
     {
-        row = &largeRow;
-        col = &largeKeyCol;
+        row = largeRow;
+        row.setData(const_cast<uint8_t *>(data));
+        col = largeKeyCol;
         if (forceStringTable)
-            largeRow.forceStringTable();
+            row.forceStringTable();
         //cout << "Hasher: i see a large side row: " << largeRow.toString() << endl;
     }
 
     // do the hashing
     int64_t key;
-    if (row->isUnsigned(*col))
-        key = (int64_t) row->getUintField(*col);
+    if (row.isUnsigned(col))
+        key = (int64_t) row.getUintField(col);
     else
-        key = row->getIntField(*col);
+        key = row.getIntField(col);
 
-    cout << "Hasher sees key = " << key << endl;
+    //cout << "Hasher sees key = " << key << endl;
     if (key == nullValueForJoinColumn)
         return nullHash;
     else
@@ -1796,62 +1800,64 @@ inline bool TupleJoiner::JoinComparator::operator()(const uint8_t *data1, const 
 {
     if (!initdRows)
     {
-        smallRG->initRow(&smallRow1);
-        smallRG->initRow(&smallRow2);
-        largeRG->initRow(&largeRow1);
-        largeRG->initRow(&largeRow2);
+        smallRG->initRow(&smallRow);
+        //smallRG->initRow(&smallRow2);
+        largeRG->initRow(&largeRow);
+        //largeRG->initRow(&largeRow2);
         if (largeRG->usesStringTable())
             forceStringTable = true;
         initdRows = true;
     }
 
-    Row *row1, *row2;
-    const int *col1, *col2;
+    Row row1, row2;
+    int col1, col2;
 
     // figure out what data1 and data2 refer to
-    largeRow1.setData(const_cast<uint8_t *>(data1));
-    if (largeRow1.isSmallSideRow())
+    //row1.setData(const_cast<uint8_t *>(data1));
+    if (Row::isSmallSideRow(data1))
     {
-        smallRow1.setData(const_cast<uint8_t *>(data1));
-        row1 = &smallRow1;
-        col1 = &smallKeyCol;
+        row1 = smallRow;
+        row1.setData(const_cast<uint8_t *>(data1));
+        col1 = smallKeyCol;
     }
     else
     {
-        row1 = &largeRow1;
-        col1 = &largeKeyCol;
+        row1 = largeRow;
+        row1.setData(const_cast<uint8_t *>(data1));
+        col1 = largeKeyCol;
         if (forceStringTable)
-            largeRow1.forceStringTable();
+            row1.forceStringTable();
     }
-    largeRow2.setData(const_cast<uint8_t *>(data2));
-    if (largeRow2.isSmallSideRow())
+
+    //row2.setData(const_cast<uint8_t *>(data2));
+    if (Row::isSmallSideRow(data2))
     {
-        smallRow2.setData(const_cast<uint8_t *>(data2));
-        row2 = &smallRow2;
-        col2 = &smallKeyCol;
+        row2 = smallRow;
+        row2.setData(const_cast<uint8_t *>(data2));
+        col2 = smallKeyCol;
     }
     else
     {
-        row2 = &largeRow2;
-        col2 = &largeKeyCol;
+        row2 = largeRow;
+        row2.setData(const_cast<uint8_t *>(data2));
+        col2 = largeKeyCol;
         if (forceStringTable)
-            largeRow2.forceStringTable();
+            row2.forceStringTable();
     }
 
     // get the join values & do the comparison
-    int64_t val1, val2;
-    if (row1->isUnsigned(*col1))
-        val1 = (int64_t) row1->getUintField(*col1);
+    int64_t val1;  //, val2;
+    if (row1.isUnsigned(col1))
+        val1 = (int64_t) row1.getUintField(col1);
     else
-        val1 = row1->getIntField(*col1);
-    if (row2->isUnsigned(*col2))
-        val2 = (int64_t) row2->getUintField(*col2);
+        val1 = row1.getIntField(col1);
+    if (row2.isUnsigned(col2))
+        return val1 == (int64_t) row2.getUintField(col2);
     else
-        val2 = row2->getIntField(*col2);
+        return val1 == row2.getIntField(col2);
 
-    cout << "Comparator sees key1 = " << val1 << " key2 = " << val2 << endl;
-
-    return (val1 == val2);
+    //cout << "Comparator sees key1 = " << val1 << " key2 = " << val2 << endl;
+    //return (val1 == val2);
 }
 
 };

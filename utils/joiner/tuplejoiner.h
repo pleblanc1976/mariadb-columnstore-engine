@@ -365,7 +365,7 @@ private:
             int smallKeyCol, int largeKeyCol);
         bool operator()(const uint8_t *, const uint8_t *) const;
         const rowgroup::RowGroup *smallRG, *largeRG;
-        mutable rowgroup::Row smallRow1, smallRow2, largeRow1, largeRow2;
+        mutable rowgroup::Row smallRow, largeRow;
         mutable bool initdRows, forceStringTable;
         int smallKeyCol, largeKeyCol;
     };
@@ -460,6 +460,7 @@ private:
     void bucketsToTables(buckets_t *, hash_table_t *);
 
     bool _convertToDiskJoin;
+    std::atomic<uint> totalInserted;
 };
 
 }

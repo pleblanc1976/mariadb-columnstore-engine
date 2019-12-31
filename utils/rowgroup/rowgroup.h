@@ -426,7 +426,9 @@ public:
     inline void markRow();
     inline bool isMarked();
     inline void markSmallSideRow();
+    inline void markLargeSideRow();
     inline bool isSmallSideRow();
+    static inline bool isSmallSideRow(const uint8_t *_data);
     void initToNull();
     inline void forceStringTable()
     {
@@ -879,9 +881,19 @@ inline void Row::markSmallSideRow()
     *((uint16_t*) data) = 0x8000;
 }
 
+inline void Row::markLargeSideRow()
+{
+    *((uint16_t*) data) &= 0x7fff;
+}
+
 inline bool Row::isSmallSideRow()
 {
     return *((uint16_t *) data) & 0x8000;
+}
+
+inline bool Row::isSmallSideRow(const uint8_t *_data)
+{
+    return *((uint16_t *) _data) & 0x8000;
 }
 
 /* Begin speculative code! */
