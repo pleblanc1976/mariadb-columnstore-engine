@@ -328,8 +328,10 @@ public:
 
     template<int len> inline uint64_t getUintField(uint32_t colIndex) const;
     inline uint64_t getUintField(uint32_t colIndex) const;
+    inline uint64_t getUintFieldFrom(const uint8_t *data, uint32_t colIndex) const;
     template<int len> inline int64_t getIntField(uint32_t colIndex) const;
     inline int64_t getIntField(uint32_t colIndex) const;
+    inline int64_t getIntFieldFrom(const uint8_t *data, uint32_t colIndex) const;
     template<int len> inline bool equals(uint64_t val, uint32_t colIndex) const;
     inline bool equals(long double val, uint32_t colIndex) const;
     inline bool equals(const std::string& val, uint32_t colIndex) const;
@@ -670,6 +672,28 @@ inline uint64_t Row::getUintField(uint32_t colIndex) const
     }
 }
 
+inline uint64_t Row::getUintFieldFrom(const uint8_t *_data, uint32_t colIndex) const
+{
+    switch (getColumnWidth(colIndex))
+    {
+        case 1:
+            return _data[offsets[colIndex]];
+
+        case 2:
+            return *((uint16_t*) &_data[offsets[colIndex]]);
+
+        case 4:
+            return *((uint32_t*) &_data[offsets[colIndex]]);
+
+        case 8:
+            return *((uint64_t*) &_data[offsets[colIndex]]);
+
+        default:
+            idbassert(0);
+            throw std::logic_error("Row::getUintField(): bad length.");
+    }
+}
+
 inline uint64_t Row::getUintField(uint32_t colIndex) const
 {
     switch (getColumnWidth(colIndex))
@@ -709,6 +733,28 @@ inline int64_t Row::getIntField(uint32_t colIndex) const
 
         case 8:
             return *((int64_t*) &data[offsets[colIndex]]);
+
+        default:
+            idbassert(0);
+            throw std::logic_error("Row::getIntField(): bad length.");
+    }
+}
+
+inline int64_t Row::getIntFieldFrom(const uint8_t *_data, uint32_t colIndex) const
+{
+    switch (getColumnWidth(colIndex))
+    {
+        case 1:
+            return (int8_t) _data[offsets[colIndex]];
+
+        case 2:
+            return *((int16_t*) &_data[offsets[colIndex]]);
+
+        case 4:
+            return *((int32_t*) &_data[offsets[colIndex]]);
+
+        case 8:
+            return *((int64_t*) &_data[offsets[colIndex]]);
 
         default:
             idbassert(0);

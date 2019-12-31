@@ -676,7 +676,7 @@ void TupleJoiner::match(rowgroup::Row& largeSideRow, uint32_t largeRowIndex, uin
 
 void TupleJoiner::doneInserting()
 {
-    //cout << "done inserting, size = " << size() << " total inserted = " << totalInserted << endl;
+    cout << "done inserting, mem usage = " << getMemUsage() << endl;
     // a minor textual cleanup
 #ifdef TJ_DEBUG
 #define CHECKSIZE \
@@ -1754,34 +1754,32 @@ inline uint64_t TupleJoiner::JoinHasher::operator()(const uint8_t *data) const
         initdRows = true;
     }
 
-    Row row;
+    Row *row;
     int col;
 
     // figure out if this is a large-side or small-side row
     //row.setData(const_cast<uint8_t *>(data));
     if (Row::isSmallSideRow(data))
     {
-        row = smallRow;
-        row.setData(const_cast<uint8_t *>(data));
+        row = &smallRow;
         col = smallKeyCol;
         //cout << "Hasher: i see a small side row: " << smallRow.toString() << endl;
     }
     else
     {
-        row = largeRow;
-        row.setData(const_cast<uint8_t *>(data));
+        row = &largeRow;
         col = largeKeyCol;
-        if (forceStringTable)
-            row.forceStringTable();
+        //if (forceStringTable)
+        //    row.forceStringTable();
         //cout << "Hasher: i see a large side row: " << largeRow.toString() << endl;
     }
 
     // do the hashing
     int64_t key;
-    if (row.isUnsigned(col))
-        key = (int64_t) row.getUintField(col);
+    if (row->isUnsigned(col))
+        key = (int64_t) row->getUintFieldFrom(data, col);
     else
-        key = row.getIntField(col);
+        key = row->getIntFieldFrom(data, col);
 
     //cout << "Hasher sees key = " << key << endl;
     if (key == nullValueForJoinColumn)
@@ -1809,52 +1807,48 @@ inline bool TupleJoiner::JoinComparator::operator()(const uint8_t *data1, const 
         initdRows = true;
     }
 
-    Row row1, row2;
+    Row *row1, *row2;
     int col1, col2;
 
     // figure out what data1 and data2 refer to
     //row1.setData(const_cast<uint8_t *>(data1));
     if (Row::isSmallSideRow(data1))
     {
-        row1 = smallRow;
-        row1.setData(const_cast<uint8_t *>(data1));
+        row1 = &smallRow;
         col1 = smallKeyCol;
     }
     else
     {
-        row1 = largeRow;
-        row1.setData(const_cast<uint8_t *>(data1));
+        row1 = &largeRow;
         col1 = largeKeyCol;
-        if (forceStringTable)
-            row1.forceStringTable();
+        //if (forceStringTable)
+        //    row1.forceStringTable();
     }
 
     //row2.setData(const_cast<uint8_t *>(data2));
     if (Row::isSmallSideRow(data2))
     {
-        row2 = smallRow;
-        row2.setData(const_cast<uint8_t *>(data2));
+        row2 = &smallRow;
         col2 = smallKeyCol;
     }
     else
     {
-        row2 = largeRow;
-        row2.setData(const_cast<uint8_t *>(data2));
+        row2 = &largeRow;
         col2 = largeKeyCol;
-        if (forceStringTable)
-            row2.forceStringTable();
+        //if (forceStringTable)
+        //    row2.forceStringTable();
     }
 
     // get the join values & do the comparison
     int64_t val1;  //, val2;
-    if (row1.isUnsigned(col1))
-        val1 = (int64_t) row1.getUintField(col1);
+    if (row1->isUnsigned(col1))
+        val1 = (int64_t) row1->getUintFieldFrom(data1, col1);
     else
-        val1 = row1.getIntField(col1);
-    if (row2.isUnsigned(col2))
-        return val1 == (int64_t) row2.getUintField(col2);
+        val1 = row1->getIntFieldFrom(data1, col1);
+    if (row2->isUnsigned(col2))
+        return val1 == (int64_t) row2->getUintFieldFrom(data2, col2);
     else
-        return val1 == row2.getIntField(col2);
+        return val1 == row2->getIntFieldFrom(data2, col2);
 
     //cout << "Comparator sees key1 = " << val1 << " key2 = " << val2 << endl;
     //return (val1 == val2);
