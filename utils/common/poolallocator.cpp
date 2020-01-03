@@ -107,6 +107,8 @@ void PoolAllocator::deallocate(void* p, bool isOOB)
     }
 
     memUsage -= it->second.size;
+    oobDeallocd += it->second.size;
+    oobAllocSize -= it->second.size;
     oob.erase(it);
     if (useLock)
         lock.store(false, std::memory_order_release);

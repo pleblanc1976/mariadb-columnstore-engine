@@ -677,6 +677,9 @@ void TupleJoiner::match(rowgroup::Row& largeSideRow, uint32_t largeRowIndex, uin
 void TupleJoiner::doneInserting()
 {
     cout << "done inserting, node count = " << size() << " mem usage = " << getMemUsage() << endl;
+    for (uint i = 0; i < bucketCount; i++)
+        _pool[i]->printKPIs();
+
     // a minor textual cleanup
 #ifdef TJ_DEBUG
 #define CHECKSIZE \

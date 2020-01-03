@@ -86,7 +86,6 @@ public:
     static const uint32_t DEFAULT_SIZE = 32768 * sizeof(T);
 
     boost::shared_ptr<utils::PoolAllocator> pa;
-    uint64_t nodeCount;
 };
 
 template<class T>
@@ -94,21 +93,18 @@ STLPoolAllocator<T>::STLPoolAllocator() throw()
 {
     //std::cout << "STLPoolAllocator: size of T = " << sizeof(T) << std::endl;
     pa.reset(new PoolAllocator(DEFAULT_SIZE));
-    nodeCount = 0;
 }
 
 template<class T>
 STLPoolAllocator<T>::STLPoolAllocator(const STLPoolAllocator<T>& s) throw()
 {
     pa = s.pa;
-    nodeCount = s.nodeCount;
 }
 
 template<class T>
 STLPoolAllocator<T>::STLPoolAllocator(uint32_t capacity) throw()
 {
     pa.reset(new PoolAllocator(capacity));
-    nodeCount = 0;
 }
 
 template<class T>
@@ -116,7 +112,6 @@ template<class U>
 STLPoolAllocator<T>::STLPoolAllocator(const STLPoolAllocator<U>& s) throw()
 {
     pa = s.pa;
-    nodeCount = s.nodeCount;
 }
 
 template<class T>
@@ -142,7 +137,6 @@ typename STLPoolAllocator<T>::pointer
 STLPoolAllocator<T>::allocate(typename STLPoolAllocator<T>::size_type s,
                               typename std::allocator<void>::const_pointer hint)
 {
-    nodeCount++;
     return (pointer) pa->allocate(s * sizeof(T), s != 1);
 }
 
