@@ -676,11 +676,11 @@ void TupleJoiner::match(rowgroup::Row& largeSideRow, uint32_t largeRowIndex, uin
 
 void TupleJoiner::doneInserting()
 {
-    cout << "done inserting, mem usage = " << getMemUsage() << endl;
+    cout << "done inserting, node count = " << size() << " mem usage = " << getMemUsage() << endl;
     // a minor textual cleanup
 #ifdef TJ_DEBUG
 #define CHECKSIZE \
-		if (uniquer.size() > uniqueLimit) { \
+		if (uniquer.siz() > uniqueLimit) { \
 			cout << "too many discrete values\n"; \
 			return; \
 		}

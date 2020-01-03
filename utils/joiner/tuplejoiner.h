@@ -29,6 +29,7 @@
 #include <unordered_map>
 #else
 #include <tr1/unordered_map>
+#include <tr1/unordered_set>
 #include <unordered_set>
 #endif
 
@@ -370,7 +371,7 @@ private:
         int smallKeyCol, largeKeyCol;
     };
 
-    typedef std::unordered_multiset<uint8_t*, JoinHasher, JoinComparator,
+    typedef std::tr1::unordered_multiset<uint8_t*, JoinHasher, JoinComparator,
             utils::STLPoolAllocator<uint8_t* > > hash_t;
 
     typedef std::tr1::unordered_multimap<int64_t, rowgroup::Row::Pointer, hasher, std::equal_to<int64_t>,

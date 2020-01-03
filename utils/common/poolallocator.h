@@ -60,10 +60,11 @@ public:
         lock(false), nodeDeallocCount(0), nodeAllocCount(0), nodeAllocSize(0), oobAllocCount(0),
         oobAllocSize(0), oobAllocSizeInPool(0) { }
     virtual ~PoolAllocator() {
+#if 0
         if (oobAllocCount > 0)
             std::cout << "~PA: nodeDeallocCount = " << nodeDeallocCount <<
                 " nodeAllocCount = " << nodeAllocCount << " nodeAllocSize = " <<
-                nodeAllocSize << " oobAllocCount = " << oobAllocCount 
+                nodeAllocSize << " oobAllocCount = " << oobAllocCount
                 << " oobAllocSize = " << oobAllocSize << " oobAllocInPool = " <<
                 oobAllocSizeInPool <<
                 " avg alloc size = " << oobAllocSize / oobAllocCount <<
@@ -75,7 +76,7 @@ public:
                 " oobAllocSize = " << oobAllocSize << " oobAllocInPool = " <<
                 oobAllocSizeInPool <<
                 std::endl;
-
+#endif
     }
 
     PoolAllocator& operator=(const PoolAllocator&);

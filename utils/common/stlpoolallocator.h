@@ -92,7 +92,7 @@ public:
 template<class T>
 STLPoolAllocator<T>::STLPoolAllocator() throw()
 {
-    std::cout << "STLPoolAllocator: size of T = " << sizeof(T) << std::endl;
+    //std::cout << "STLPoolAllocator: size of T = " << sizeof(T) << std::endl;
     pa.reset(new PoolAllocator(DEFAULT_SIZE));
     nodeCount = 0;
 }
@@ -122,8 +122,8 @@ STLPoolAllocator<T>::STLPoolAllocator(const STLPoolAllocator<U>& s) throw()
 template<class T>
 STLPoolAllocator<T>::~STLPoolAllocator()
 {
-    std::cout << "STLPoolAllocator: size of T = " << sizeof(T) << " node count = " <<
-        nodeCount << " final size = " << getMemUsage() << std::endl;
+    //std::cout << "STLPoolAllocator: size of T = " << sizeof(T) << " node count = " <<
+    //    nodeCount << " final size = " << getMemUsage() << std::endl;
 }
 
 template<class T>
