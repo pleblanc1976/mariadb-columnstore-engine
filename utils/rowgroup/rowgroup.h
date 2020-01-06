@@ -329,9 +329,11 @@ public:
     template<int len> inline uint64_t getUintField(uint32_t colIndex) const;
     inline uint64_t getUintField(uint32_t colIndex) const;
     inline uint64_t getUintFieldFrom(const uint8_t *data, uint32_t colIndex) const;
+    inline uint64_t getUintFieldFrom(const Pointer &data, uint32_t colIndex) const;
     template<int len> inline int64_t getIntField(uint32_t colIndex) const;
     inline int64_t getIntField(uint32_t colIndex) const;
     inline int64_t getIntFieldFrom(const uint8_t *data, uint32_t colIndex) const;
+    inline int64_t getIntFieldFrom(const Pointer &data, uint32_t colIndex) const;
     template<int len> inline bool equals(uint64_t val, uint32_t colIndex) const;
     inline bool equals(long double val, uint32_t colIndex) const;
     inline bool equals(const std::string& val, uint32_t colIndex) const;
@@ -431,6 +433,7 @@ public:
     inline void markLargeSideRow();
     inline bool isSmallSideRow();
     static inline bool isSmallSideRow(const uint8_t *_data);
+    static inline bool isSmallSideRow(const Pointer &_data);
     void initToNull();
     inline void forceStringTable()
     {
@@ -694,6 +697,28 @@ inline uint64_t Row::getUintFieldFrom(const uint8_t *_data, uint32_t colIndex) c
     }
 }
 
+inline uint64_t Row::getUintFieldFrom(const Pointer &_data, uint32_t colIndex) const
+{
+    switch (getColumnWidth(colIndex))
+    {
+        case 1:
+            return _data.data[offsets[colIndex]];
+
+        case 2:
+            return *((uint16_t*) &_data.data[offsets[colIndex]]);
+
+        case 4:
+            return *((uint32_t*) &_data.data[offsets[colIndex]]);
+
+        case 8:
+            return *((uint64_t*) &_data.data[offsets[colIndex]]);
+
+        default:
+            idbassert(0);
+            throw std::logic_error("Row::getUintField(): bad length.");
+    }
+}
+
 inline uint64_t Row::getUintField(uint32_t colIndex) const
 {
     switch (getColumnWidth(colIndex))
@@ -755,6 +780,28 @@ inline int64_t Row::getIntFieldFrom(const uint8_t *_data, uint32_t colIndex) con
 
         case 8:
             return *((int64_t*) &_data[offsets[colIndex]]);
+
+        default:
+            idbassert(0);
+            throw std::logic_error("Row::getIntField(): bad length.");
+    }
+}
+
+inline int64_t Row::getIntFieldFrom(const Pointer &_data, uint32_t colIndex) const
+{
+    switch (getColumnWidth(colIndex))
+    {
+        case 1:
+            return (int8_t) _data.data[offsets[colIndex]];
+
+        case 2:
+            return *((int16_t*) &_data.data[offsets[colIndex]]);
+
+        case 4:
+            return *((int32_t*) &_data.data[offsets[colIndex]]);
+
+        case 8:
+            return *((int64_t*) &_data.data[offsets[colIndex]]);
 
         default:
             idbassert(0);
@@ -940,6 +987,11 @@ inline bool Row::isSmallSideRow()
 inline bool Row::isSmallSideRow(const uint8_t *_data)
 {
     return *((uint16_t *) _data) & 0x8000;
+}
+
+inline bool Row::isSmallSideRow(const Pointer &_data)
+{
+    return *((uint16_t *) _data.data) & 0x8000;
 }
 
 /* Begin speculative code! */

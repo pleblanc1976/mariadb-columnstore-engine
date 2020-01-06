@@ -348,10 +348,13 @@ public:
 private:
     //typedef std::tr1::unordered_multimap<int64_t, uint8_t*, hasher, std::equal_to<int64_t>,
     //        utils::STLPoolAllocator<std::pair<const int64_t, uint8_t*> > > hash_t;
+    template<typename T>
     struct JoinHasher {
         JoinHasher(const rowgroup::RowGroup *smallRG, const rowgroup::RowGroup *largeRG,
             int smallKeyCol, int largeKeyCol);
-        uint64_t operator()(const uint8_t *) const;
+        uint64_t operator()(const T &) const;
+        //uint64_t operator()(const uint8_t *) const;
+        //uint64_t operator()(const rowgroup::Row::Pointer &) const;
         utils::Hasher h;
         const rowgroup::RowGroup *smallRG, *largeRG;
         mutable rowgroup::Row smallRow, largeRow;
@@ -361,21 +364,26 @@ private:
         mutable uint32_t nullHash;
     };
 
+    template<typename T>
     struct JoinComparator {
         JoinComparator(const rowgroup::RowGroup *smallRG, const rowgroup::RowGroup *largeRG,
             int smallKeyCol, int largeKeyCol);
-        bool operator()(const uint8_t *, const uint8_t *) const;
+        bool operator()(const T &, const T &) const;
+        //bool operator()(const uint8_t *, const uint8_t *) const;
+        //bool operator()(const rowgroup::Row::Pointer &, const rowgroup::Row::Pointer &) const;
         const rowgroup::RowGroup *smallRG, *largeRG;
         mutable rowgroup::Row smallRow, largeRow;
         mutable bool initdRows, forceStringTable;
         int smallKeyCol, largeKeyCol;
     };
 
-    typedef std::tr1::unordered_multiset<uint8_t*, JoinHasher, JoinComparator,
-            utils::STLPoolAllocator<uint8_t* > > hash_t;
+    typedef std::tr1::unordered_multiset<uint8_t *, JoinHasher<uint8_t *>, JoinComparator<uint8_t *>,
+            utils::STLPoolAllocator<uint8_t *> > hash_t;
+    typedef std::tr1::unordered_multiset<rowgroup::Row::Pointer, JoinHasher<rowgroup::Row::Pointer>,
+            JoinComparator<rowgroup::Row::Pointer>, utils::STLPoolAllocator<rowgroup::Row::Pointer> > sthash_t;
 
-    typedef std::tr1::unordered_multimap<int64_t, rowgroup::Row::Pointer, hasher, std::equal_to<int64_t>,
-            utils::STLPoolAllocator<std::pair<const int64_t, rowgroup::Row::Pointer> > > sthash_t;
+    //typedef std::tr1::unordered_multimap<int64_t, rowgroup::Row::Pointer, hasher, std::equal_to<int64_t>,
+    //        utils::STLPoolAllocator<std::pair<const int64_t, rowgroup::Row::Pointer> > > sthash_t;
     typedef std::tr1::unordered_multimap<TypelessData, rowgroup::Row::Pointer, hasher, std::equal_to<TypelessData>,
             utils::STLPoolAllocator<std::pair<const TypelessData, rowgroup::Row::Pointer> > > typelesshash_t;
     // MCOL-1822 Add support for Long Double AVG/SUM small side
