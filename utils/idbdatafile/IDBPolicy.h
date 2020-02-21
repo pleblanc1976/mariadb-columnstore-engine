@@ -48,7 +48,8 @@ public:
     enum Contexts
     {
         PRIMPROC,
-        WRITEENG
+        WRITEENG,
+        WORKERNODE
     };
 
     /**

@@ -68,6 +68,9 @@ void stop(int sig)
         die = true;
         comm->stop();
         monitorThreads.interrupt_all();
+        fflush(NULL);
+        monitorThreads.join_all();
+        exit(0);
     }
 }
 

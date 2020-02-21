@@ -140,7 +140,7 @@ SlaveComm::SlaveComm(string hostname, SlaveDBRMNode* s) :
         const char* filename = journalName.c_str();
 
         journalh = IDBDataFile::open(
-                       IDBPolicy::getType(filename, IDBPolicy::WRITEENG), filename, "a", 0);
+                       IDBPolicy::getType(filename, IDBPolicy::WORKERNODE), filename, "a", 0);
         if (journalh == NULL)
             throw runtime_error("Could not open the BRM journal for writing!");
     }
@@ -2041,7 +2041,7 @@ void SlaveComm::do_confirm()
 
         delete journalh;
         journalh = IDBDataFile::open(
-                       IDBPolicy::getType(journalName.c_str(), IDBPolicy::WRITEENG), journalName.c_str(), "w+b", 0);
+                       IDBPolicy::getType(journalName.c_str(), IDBPolicy::WORKERNODE), journalName.c_str(), "w+b", 0);
 
         if (!journalh)
             throw runtime_error("Could not open the BRM journal for writing!");
