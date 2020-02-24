@@ -68,6 +68,14 @@ UnbufferedFile::UnbufferedFile(const char* fname, const char* mode, unsigned opt
         m_fd = INVALID_HANDLE_VALUE;
         throw std::runtime_error("unable to open Unbuffered file ");
     }
+    if (string(fname).find("_journal") != string::npos)
+    {
+        isJournalFile = true;
+        journalLog.open("/tmp/unbuf-journallog", ios::app);
+        journalLog << "Opened the journal file. pos = " << tell() << endl;
+        journalLog.flush();
+    }
+
 
 #endif
 }
@@ -143,6 +151,16 @@ ssize_t UnbufferedFile::write(const void* ptr, size_t count)
     ssize_t offset = tell();
     int savedErrno;
 
+    if (isJournalFile)
+    {
+        journalLog << "writing " << count << " bytes at position " << offset <<
+            ": " << hex;
+        for (int i = 0; i < count; i++)
+            journalLog << (int) ((uint8_t *) ptr)[i] << " ";
+        journalLog << dec << endl;
+        journalLog.flush();
+    }
+
 #ifdef _MSC_VER
     DWORD bytesWritten;
 
@@ -155,6 +173,22 @@ ssize_t UnbufferedFile::write(const void* ptr, size_t count)
     ret = ::write(m_fd, ptr, count);
 #endif
     savedErrno = errno;
+
+    if (isJournalFile)
+    {
+        if (ret != count)
+            journalLog << " ** partial write!" << endl;
+        seek(0, SEEK_SET);
+        uint8_t buf[19];
+        int r = ::read(m_fd, &buf, 19);
+        int i;
+        for (i = 0; i < r; i++)
+            if (buf[i] != 0)
+                break;
+        if (i == r)
+            journalLog << " ** Caught it in the act!!" << endl;
+        seek(offset + count, SEEK_SET);
+    }
 
     if ( IDBLogger::isEnabled() )
         IDBLogger::logRW("write", m_fname, this, offset, count, ret);
@@ -302,6 +336,7 @@ time_t UnbufferedFile::mtime()
 
 int UnbufferedFile::close()
 {
+
     int ret = -1;
     int savedErrno = EINVAL;  // corresponds to INVALID_HANDLE_VALUE
 
@@ -318,9 +353,20 @@ int UnbufferedFile::close()
 
 #else
         ret = ::close(m_fd);
-#endif
+#endif    
+        if (isJournalFile)
+        {
+            journalLog << "Closing" << endl;
+            journalLog.close();
+        }
         savedErrno = errno;
     }
+    else 
+        if (isJournalFile)
+        {
+            journalLog << "Would have closed, except fd == INVALID_HANDLE_VALUE" << endl;
+            journalLog.flush();
+        }
 
     if ( IDBLogger::isEnabled() )
         IDBLogger::logNoArg(m_fname, this, "close", ret);

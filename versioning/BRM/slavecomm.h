@@ -129,6 +129,8 @@ private:
     std::string journalName;
     idbdatafile::IDBDataFile* journalh;
     int64_t snapshotInterval, journalCount;
+    size_t lastJournalPos;
+    std::ofstream journalLog;
     struct timespec MSG_TIMEOUT;
 #ifdef _MSC_VER
     boost::mutex fPidMemLock;

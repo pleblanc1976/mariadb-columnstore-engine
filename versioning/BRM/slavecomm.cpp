@@ -65,7 +65,7 @@ namespace BRM
 {
 
 SlaveComm::SlaveComm(string hostname, SlaveDBRMNode* s) :
-    slave(s), currentSaveFile(NULL), journalh(NULL)
+    slave(s), currentSaveFile(NULL), journalh(NULL), lastJournalPos(0)
 #ifdef _MSC_VER
     , fPids(0), fMaxPids(64)
 #endif
@@ -143,6 +143,8 @@ SlaveComm::SlaveComm(string hostname, SlaveDBRMNode* s) :
                        IDBPolicy::getType(filename, IDBPolicy::WORKERNODE), filename, "a", 0);
         if (journalh == NULL)
             throw runtime_error("Could not open the BRM journal for writing!");
+        lastJournalPos = journalh->tell();
+        journalLog.open("/tmp/journallog");
     }
     else
     {
@@ -2045,6 +2047,7 @@ void SlaveComm::do_confirm()
 
         if (!journalh)
             throw runtime_error("Could not open the BRM journal for writing!");
+        lastJournalPos = journalh->tell();
 
         takeSnapshot = false;
         doSaveDelta = false;
@@ -2198,7 +2201,7 @@ int SlaveComm::replayJournal(string prefix)
     const char* filename = journalName.c_str();
 
     IDBDataFile* journalf = IDBDataFile::open(
-                                IDBPolicy::getType(filename, IDBPolicy::WRITEENG), filename, "rb", 0);
+                                IDBPolicy::getType(filename, IDBPolicy::WORKERNODE), filename, "rb", 0);
 
     if (!journalf)
     {
@@ -2217,7 +2220,8 @@ int SlaveComm::replayJournal(string prefix)
 
         if (readIn > 0)
         {
-
+            //if (len == 0)
+            //    continue;
             cmd.needAtLeast(len);
             readIn = journalf->read((char*) cmd.getInputPtr(), len);
             cmd.advanceInputPtr(len);
@@ -2265,11 +2269,32 @@ void SlaveComm::saveDelta()
     try
     {
         uint32_t len = delta.length();
+        int err;
 
-        
-        journalh->write((const char*) &len, sizeof(len));
-        journalh->write((const char*) delta.buf(), delta.length());
+        idbassert(len > 0);
+        journalh->seek(0, SEEK_END);
+        journalLog << "writing " << len+4 << " bytes at position " << journalh->tell()
+            << " " << hex;
+        for (int i = 0; i < 4; i++)
+            journalLog << (int) ((char*) &len)[i] << " ";
+        for (int i = 0; i < len; i++)
+            journalLog << (int) delta.buf()[i] << " ";
+        journalLog << dec << endl;
+        journalLog.flush();
+        err = journalh->write((const char*) &len, sizeof(len));
+        idbassert(err == sizeof(len));
+        err = journalh->write((const char*) delta.buf(), len);
+        idbassert(err == len);
         journalh->flush();
+        journalLog << "new file pos is " << journalh->tell() << endl;
+        if (lastJournalPos + sizeof(len) + len != journalh->tell())
+        { 
+            ofstream argh("/tmp/wtf.txt");
+            idbassert(argh);
+            argh << "Caught it in the act!" << endl;
+            argh.close();
+        }
+        lastJournalPos = journalh->tell();
         journalCount++;
     }
     catch (exception& e)

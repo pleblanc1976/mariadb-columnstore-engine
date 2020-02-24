@@ -21,6 +21,7 @@
 #include <stdexcept>
 #include <unistd.h>
 #include <boost/utility.hpp>
+#include <fstream>
 
 #include "IDBDataFile.h"
 
@@ -59,6 +60,8 @@ private:
 #else
     int	m_fd;
 #endif
+    bool isJournalFile;
+    std::ofstream journalLog;
 };
 
 }
