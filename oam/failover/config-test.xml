@@ -1,0 +1,17 @@
+<test1>
+    <test2>
+        <DesiredNodes>
+            <Node>node1</Node>
+            <Node>node2</Node>
+            <Node>node3</Node>
+        </DesiredNodes>
+        <ActiveNodes>
+            <Node>node1</Node>
+            <Node>node2</Node>
+        </ActiveNodes>
+        <InactiveNodes>
+            <Node>node3</Node>
+        </InactiveNodes>
+        <PrimaryNode>node1</PrimaryNode>
+    </test2>
+</test1>
