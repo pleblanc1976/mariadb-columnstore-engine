@@ -3,6 +3,7 @@ from socket import *
 import threading
 import logging
 import time
+from struct import pack, unpack
 
 class HeartBeater:
     port = 9051
@@ -12,14 +13,15 @@ class HeartBeater:
     die = False
     logger = logging.getLogger(__name__)
 
-    dieMsg = bytes(b'die')
-    areYouThereMsg = bytes(b'123')
-    yesIAmMsg = bytes(b'456')
+    dieMsg = bytes(b'die!00')
+    areYouThereMsg = bytes(b'AYTM')
+    yesIAmMsg = bytes(b'YIAM')
+    sequenceNum = 0
+    config = None
 
-    def __init__(self):
-        self.recvsock = socket(type = SOCK_DGRAM)
-        self.recvsock.bind(('localhost', self.port))
-        self.sendsock = socket(type = SOCK_DGRAM)
+    def __init__(self, config):
+        self.config = config
+        self.initSockets()
         self.responseThread = threading.Thread(target = self.listenAndRespond)
         self.responseThread.start()
 
@@ -28,32 +30,41 @@ class HeartBeater:
         # break out of the recv loop
         sock = socket(type = SOCK_DGRAM)
         sock.sendto(self.dieMsg, ('localhost', self.port))
-        print("stop()!")
+
+    def initSockets(self):
+        self.recvsock = socket(type = SOCK_DGRAM)
+        self.recvsock.bind(('localhost', self.port))
+        self.sendsock = socket(type = SOCK_DGRAM)
 
     def listenAndRespond(self):
         while not self.die:
             try:
-                # for now, all msgs are 3 bytes, so we only want to recv 3 bytes at a time in case
+                # for now, all msgs are 6 bytes, so we only want to recv 6 bytes at a time in case
                 # they are backed up in a recv buffer.  If msgs need to get more complex we'll need 
                 # to add add'l intelligence to this.
-                (data, remote) =  self.recvsock.recvfrom(3)   
-                print("recv'd a msg length = {}".format(len(data)))
+                (data, remote) =  self.recvsock.recvfrom(6)
+                if len(data) != 6:
+                    continue
+                (data, seq) = unpack("4sH", data)
                 if data == self.areYouThereMsg:
-                    print("I acknowledge the are-you-there msg")
-                    self.recvsock.sendto(self.yesIAmMsg, remote)
+                    msg = pack("4sH", self.yesIAmMsg, seq)
+                    self.recvsock.sendto(msg, remote)
                 elif data == self.yesIAmMsg:
-                    print("Heartbeater would add to the heartbeat history here")
-                elif data == self.dieMsg:
-                    print("Got the die msg")
-                else:
-                    print("Got an unknown message: {}".format(list(data)))
+                    print("Heartbeater would add seq={} to the heartbeat history here".format(seq))
 
             except Exception as e:
                 self.logger.warning("listenAndRespond(): caught an exception: {}".format(e))
-                print("listenAndRespond(): caught an exception: {}".format(e))
-                time.sleep(5)
+                time.sleep(1)
 
-        print("listenAndRespond exiting")
-
+    def sendHeartbeats(self):
+        nodes = self.config.getDesiredNodes()
+        try: 
+            for node in nodes:
+                msg = pack("4sH", self.areYouThereMsg, self.sequenceNum)
+                self.sendsock.sendto(msg, (node, self.port))
+        except Exception as e:
+            self.logger.warning("sendHeartbeats(): caught an exception: {}".format(e))
+        self.sequenceNum = (self.sequenceNum + 1) % 65535
+    
 
 
