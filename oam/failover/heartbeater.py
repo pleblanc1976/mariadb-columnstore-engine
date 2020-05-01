@@ -5,6 +5,8 @@ import logging
 import time
 from struct import pack, unpack
 
+from heartbeat_history import HBHistory
+
 class HeartBeater:
     port = 9051
     recvsock = None
@@ -18,6 +20,7 @@ class HeartBeater:
     yesIAmMsg = bytes(b'YIAM')
     sequenceNum = 0
     config = None
+    history = HBHistory()
 
     def __init__(self, config):
         self.config = config
@@ -50,7 +53,8 @@ class HeartBeater:
                     msg = pack("4sH", self.yesIAmMsg, seq)
                     self.recvsock.sendto(msg, remote)
                 elif data == self.yesIAmMsg:
-                    print("Heartbeater would add seq={} to the heartbeat history here".format(seq))
+                    # Might need to think about all of the dns activity.  Later.
+                    history.gotHeartbeat(gethostbyaddr(remote[0])[0], seq)
 
             except Exception as e:
                 self.logger.warning("listenAndRespond(): caught an exception: {}".format(e))
