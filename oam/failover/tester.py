@@ -27,5 +27,22 @@ else:
 
 hb.stop()
 
+from heartbeat_history import HBHistory
+
+hbh = HBHistory()
+hbh.setCurrentTick(0)
+hbh.gotHeartbeat("node1", 0)
+hbh.setCurrentTick(1)
+hbh.gotHeartbeat("node2", 1)
+hbh.setCurrentTick(2)
+hbh.setCurrentTick(10)
+hbh.gotHeartbeat("node1", 9)
+hbh.gotHeartbeat("node1", 2)
+pongs = hbh.getNodeHistory("node1", 20)
+print("Got pongs: {}".format(pongs))
+
+
+
+
 print("tester is finished")
 
