@@ -20,10 +20,11 @@ class HeartBeater:
     yesIAmMsg = bytes(b'YIAM')
     sequenceNum = 0
     config = None
-    history = HBHistory()
+    history = None
 
-    def __init__(self, config):
+    def __init__(self, config, history):
         self.config = config
+        self.history = history
         self.initSockets()
         self.responseThread = threading.Thread(target = self.listenAndRespond)
         self.responseThread.start()

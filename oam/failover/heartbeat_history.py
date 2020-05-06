@@ -30,8 +30,8 @@ class HBHistory:
         self.lateWindow = lateWindow
 
     # to simplify the logic
-    def _initNode(self, node):
-        self.nodeHistory[node] = array('b', [ self.GoodResponse for _ in range(self.tickWindow) ])
+    def _initNode(self, node, defaultValue = self.GoodResponse):
+        self.nodeHistory[node] = array('b', [ defaultValue for _ in range(self.tickWindow) ])
 
     def removeNode(self, node):
         self.mutex.acquire()
@@ -60,10 +60,10 @@ class HBHistory:
         self.nodeHistory[node][tickID % self.tickWindow] = status
         self.mutex.release()
 
-    def getNodeHistory(self, node, tickInterval):
+    def getNodeHistory(self, node, tickInterval, defaultValue):
         self.mutex.acquire()
         if node not in self.nodeHistory:
-            _initNode(node)
+            _initNode(node, defaultValue = defaultValue)
  
         # We don't want to return values in the range where we are likely to be
         # gathering responses.

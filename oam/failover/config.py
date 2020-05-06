@@ -41,6 +41,17 @@ class Config:
         ret = self._inactive_nodes
         self.config_lock.release()
         return ret
+
+    # returns a 3-element tuple describing the status of all nodes.
+    # index 0 = all nodes in the cluster
+    # index 1 = all active nodes
+    # index 2 = all inactive nodes
+    def getAllNodes(self):
+        self.config_lock.acquire()
+        self.check_reload()
+        ret = (self._desiredNodes, self._activeNodes, self._inactiveNodes)
+        self.config_lock.release()
+        return ret
  
     def getPrimaryNode(self):
         self.config_lock.acquire()
@@ -86,10 +97,14 @@ class Config:
             return False
         primary_node = domtmp[0].nodeValue
 
+        desired_nodes.sort()
+        active_nodes.sort()
+        inactive_nodes.sort()
         self._desired_nodes = desired_nodes
         self._active_nodes = active_nodes
         self._inactive_nodes = inactive_nodes
         self._primary_node = primary_node
+
         self.last_mtime = last_mtime
         return True
 
