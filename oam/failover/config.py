@@ -49,7 +49,7 @@ class Config:
     def getAllNodes(self):
         self.config_lock.acquire()
         self.check_reload()
-        ret = (self._desiredNodes, self._activeNodes, self._inactiveNodes)
+        ret = (self._desired_nodes, self._active_nodes, self._inactive_nodes)
         self.config_lock.release()
         return ret
  

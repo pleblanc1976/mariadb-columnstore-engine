@@ -2,54 +2,58 @@
 
 
 # First a dummy agent
-class Agent:
+class DummyAgent:
     def __init__(self):
         pass
 
-    def activateNodes(nodes):
-        pass
+    def activateNodes(self, nodes):
+        print("Got activateNodes({})".format(nodes))
 
-    def deactivateNodes(nodes):
-        pass
+    def deactivateNodes(self, nodes):
+        print("Got deactivateNodes({})".format(nodes))
 
-    def designatePrimaryNode(node):
-        pass
+    def designatePrimaryNode(self, node):
+        print("Got designatePrimaryNode({})".format(node))
 
-    def enterStandbyMode():
-        pass
+    def enterStandbyMode(self):
+        print("Got enterStandbyMode()")
 
-    def getNodeHealth():
+    def getNodeHealth(self):
+        print("Got getNodeHealth()")
         return 0
 
-    def raiseAlarm(severity, msg):
-        pass
+    def raiseAlarm(self, severity, msg):
+        print("Got raiseAlarm({}, {})".format(severity, msg))
 
 
 # The AgentComm class
 # Doesn't do anything useful yet obviously
 class AgentComm:
     
-    agent = Agent()
+    agent = None
 
-    def __init__(self):
-        pass
+    def __init__(self, agent):
+        if agent is None:
+            self.agent = DummyAgent()
+        else:
+            self.agent = agent
 
-    def activateNodes(nodes):
-        agent.activateNodes(nodes)
+    def activateNodes(self, nodes):
+        self.agent.activateNodes(nodes)
 
-    def deactivateNodes(nodes):
-        agent.deactivateNodes(nodes)
+    def deactivateNodes(self, nodes):
+        self.agent.deactivateNodes(nodes)
 
-    def designatePrimaryNode(node):
-        agent.designatePrimaryNode(node)
+    def designatePrimaryNode(self, node):
+        self.agent.designatePrimaryNode(node)
 
-    def enterStandbyMode():
-        agent.enterStandbyMode()
+    def enterStandbyMode(self):
+        self.agent.enterStandbyMode()
 
-    def getNodeHealth():
-        return agent.getNodeHealth()
+    def getNodeHealth(self):
+        return self.agent.getNodeHealth()
 
-    def raiseAlarm(severity, msg):
-        agent.raiseAlarm(severity, msg)
+    def raiseAlarm(self, severity, msg):
+        self.agent.raiseAlarm(severity, msg)
 
 

@@ -21,10 +21,13 @@ class HeartBeater:
     sequenceNum = 0
     config = None
     history = None
+    ip_to_name = None
 
     def __init__(self, config, history):
         self.config = config
         self.history = history
+
+    def start(self):
         self.initSockets()
         self.responseThread = threading.Thread(target = self.listenAndRespond)
         self.responseThread.start()
@@ -34,11 +37,22 @@ class HeartBeater:
         # break out of the recv loop
         sock = socket(type = SOCK_DGRAM)
         sock.sendto(self.dieMsg, ('localhost', self.port))
+        time.sleep(1)
+        self.recvsock.close()
 
     def initSockets(self):
         self.recvsock = socket(type = SOCK_DGRAM)
         self.recvsock.bind(('localhost', self.port))
         self.sendsock = socket(type = SOCK_DGRAM)
+
+    def updateReverseDNSCache(self, ip):
+        aliases = gethostbyaddr(ip)[1]
+        allNodes = self.config.getDesiredNodes()
+        for name in aliases:
+            if name in allNodes:
+                self.ip_to_name[ip] = name
+                return
+        self.ip_to_name[ip] = "unknown"
 
     def listenAndRespond(self):
         while not self.die:
@@ -54,8 +68,12 @@ class HeartBeater:
                     msg = pack("4sH", self.yesIAmMsg, seq)
                     self.recvsock.sendto(msg, remote)
                 elif data == self.yesIAmMsg:
-                    # Might need to think about all of the dns activity.  Later.
-                    history.gotHeartbeat(gethostbyaddr(remote[0])[0], seq)
+                    # Might need to think about all of the dns activity.
+                    # Update.  id the name remote is using in desirednodes, store
+                    # it in a map of ip->name and use it as a cache
+                    if remote[0] not in ip_to_name:
+                        self.updateReverseDNSCache(remote[0])
+                    history.gotHeartbeat(self.ip_to_name[remote[0]], seq)
 
             except Exception as e:
                 self.logger.warning("listenAndRespond(): caught an exception: {}".format(e))
