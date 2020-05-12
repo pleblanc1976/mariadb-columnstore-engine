@@ -26,6 +26,7 @@ class HeartBeater:
     def __init__(self, config, history):
         self.config = config
         self.history = history
+        self.ip_to_name = {}
 
     def start(self):
         self.initSockets()
@@ -62,21 +63,28 @@ class HeartBeater:
                 # to add add'l intelligence to this.
                 (data, remote) =  self.recvsock.recvfrom(6)
                 if len(data) != 6:
+                    print("HB: got an invalid msg, len = {}".format(len(data)))
                     continue
                 (data, seq) = unpack("4sH", data)
                 if data == self.areYouThereMsg:
                     msg = pack("4sH", self.yesIAmMsg, seq)
-                    self.recvsock.sendto(msg, remote)
+                    self.recvsock.sendto(msg, (remote[0], self.port))
+                    print("HB: responded to heartbeat from {} seq {}".format(remote, seq))
                 elif data == self.yesIAmMsg:
+                    print("HB: Got the yes i am msg")
                     # Might need to think about all of the dns activity.
                     # Update.  id the name remote is using in desirednodes, store
                     # it in a map of ip->name and use it as a cache
-                    if remote[0] not in ip_to_name:
+                    if remote[0] not in self.ip_to_name:
                         self.updateReverseDNSCache(remote[0])
-                    history.gotHeartbeat(self.ip_to_name[remote[0]], seq)
+                    print("HB: got HB response from ip {}, name {}".format(remote[0], self.ip_to_name[remote[0]]))
+                    self.history.gotHeartbeat(self.ip_to_name[remote[0]], seq)
+                else:
+                    print("HB: got an unknown msg")
 
             except Exception as e:
                 self.logger.warning("listenAndRespond(): caught an exception: {}".format(e))
+                
                 time.sleep(1)
 
     def sendHeartbeats(self):

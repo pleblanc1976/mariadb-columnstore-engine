@@ -87,6 +87,8 @@ class NodeMonitor:
         (desiredNodes, activeNodes, inactiveNodes) = self._config.getAllNodes()
         self.primaryNode = self._config.getPrimaryNode()
         self._pickNewActor(activeNodes)
+
+        print("isActorOfCohort = {}".format(self._isActorOfCohort))
  
         while not self._die:
             # these things would normally go at the end of the loop; doing it here
@@ -132,6 +134,7 @@ class NodeMonitor:
                 continue
           
             # as of here, this node is the actor of a quorum
+            print("entered is-actor clause")
  
             # remove nodes from history
             self._removeRemovedNodes(oldDesiredNodes, desiredNodes)               
@@ -142,6 +145,7 @@ class NodeMonitor:
             for node in activeNodes:
                 history = self._hbHistory.getNodeHistory(node, self.samplingInterval, HBHistory.GoodResponse)
                 noResponses = [ x for x in history if x == HBHistory.NoResponse ]
+                print("I see {} no-responses for node {}".format(len(noResponses), node))
                 if len(noResponses) == self.samplingInterval:
                     deactivateList.append(node)
             # if the primary node is in this list to be deactivated, choose a new primary node.
@@ -160,6 +164,8 @@ class NodeMonitor:
                     activateList.append(node)
             if len(activateList) > 0:
                 self._agentComm.activateNodes(activateList)
-        
             
+# methods for testing
+    def turnOffHBResponder(self):
+        pass
 

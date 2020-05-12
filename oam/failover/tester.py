@@ -20,15 +20,17 @@ hb.start()
 sock = socket(type = SOCK_DGRAM)
 sock.bind(('localhost', 12345))
 
-msg = struct.pack("4sH", hb.areYouThereMsg, 1234)
-sock.sendto(msg, ('localhost', hb.port))
-print("sent the are-you-there msg")
-(data, remote) = sock.recvfrom(6)
-(data, seq) = struct.unpack("4sH", data)
-if data == hb.yesIAmMsg:
-    print("got the yes-i-am msg, seq = {}".format(seq))
-else:
-    print("got something other than the yes-i-am-msg")
+# Updated heartbeater to send the reply to its own port, rather than to
+# the port of the sending socket.  Need to update this.
+#msg = struct.pack("4sH", hb.areYouThereMsg, 1234)
+#sock.sendto(msg, ('localhost', hb.port))
+#print("sent the are-you-there msg")
+#(data, remote) = sock.recvfrom(6)
+#(data, seq) = struct.unpack("4sH", data)
+#if data == hb.yesIAmMsg:
+#    print("got the yes-i-am msg, seq = {}".format(seq))
+#else:
+#    print("got something other than the yes-i-am-msg")
 
 hb.stop()
 
@@ -53,6 +55,7 @@ print("Got pongs: {}".format(pongs))
 # should be deactivated, and our DummyAgent will start printing that they are being deactivated
 def testNodeMonitor1(nm):
     nm.start()
+    #nm.turnOffHBResponder()
     print("Waiting for 33 secs, watch for output from DummyAgent")
     time.sleep(32)
     nm.stop()
