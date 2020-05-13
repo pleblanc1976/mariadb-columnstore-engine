@@ -9,8 +9,10 @@ from heartbeat_history import HBHistory
 
 class HeartBeater:
     port = 9051
-    recvsock = None
-    sendsock = None
+#    recvsock = None
+#    sendsock = None
+    sock = None
+    sockMutex = None
     responseThread = None
     die = False
     logger = logging.getLogger(__name__)
@@ -27,6 +29,7 @@ class HeartBeater:
         self.config = config
         self.history = history
         self.ip_to_name = {}
+        self.sockMutex = threading.Lock()
 
     def start(self):
         self.initSockets()
@@ -39,12 +42,11 @@ class HeartBeater:
         sock = socket(type = SOCK_DGRAM)
         sock.sendto(self.dieMsg, ('localhost', self.port))
         time.sleep(1)
-        self.recvsock.close()
+        self.sock.close()
 
     def initSockets(self):
-        self.recvsock = socket(type = SOCK_DGRAM)
-        self.recvsock.bind(('localhost', self.port))
-        self.sendsock = socket(type = SOCK_DGRAM)
+        self.sock = socket(type = SOCK_DGRAM)
+        self.sock.bind(('localhost', self.port))
 
     def updateReverseDNSCache(self, ip):
         aliases = gethostbyaddr(ip)[1]
@@ -61,41 +63,48 @@ class HeartBeater:
                 # for now, all msgs are 6 bytes, so we only want to recv 6 bytes at a time in case
                 # they are backed up in a recv buffer.  If msgs need to get more complex we'll need 
                 # to add add'l intelligence to this.
-                (data, remote) =  self.recvsock.recvfrom(6)
+                (data, remote) =  self.sock.recvfrom(6)
                 if len(data) != 6:
-                    print("HB: got an invalid msg, len = {}".format(len(data)))
                     continue
                 (data, seq) = unpack("4sH", data)
                 if data == self.areYouThereMsg:
                     msg = pack("4sH", self.yesIAmMsg, seq)
-                    self.recvsock.sendto(msg, (remote[0], self.port))
-                    print("HB: responded to heartbeat from {} seq {}".format(remote, seq))
+                    self.send(msg, remote[0])    
                 elif data == self.yesIAmMsg:
-                    print("HB: Got the yes i am msg")
                     # Might need to think about all of the dns activity.
                     # Update.  id the name remote is using in desirednodes, store
                     # it in a map of ip->name and use it as a cache
                     if remote[0] not in self.ip_to_name:
                         self.updateReverseDNSCache(remote[0])
-                    print("HB: got HB response from ip {}, name {}".format(remote[0], self.ip_to_name[remote[0]]))
                     self.history.gotHeartbeat(self.ip_to_name[remote[0]], seq)
-                else:
-                    print("HB: got an unknown msg")
 
             except Exception as e:
                 self.logger.warning("listenAndRespond(): caught an exception: {}".format(e))
-                
                 time.sleep(1)
+
+    def send(self, msg, destaddr):
+        self.sockMutex.acquire()
+        try:
+            self.sock.sendto(msg, (destaddr, self.port))
+        except Exception as e:
+            self.logger.warning("Heartbeater.send(): caught {}".format(e))
+        finally:
+            self.sockMutex.release()
+        
 
     def sendHeartbeats(self):
         nodes = self.config.getDesiredNodes()
-        try: 
+        msg = pack("4sH", self.areYouThereMsg, self.sequenceNum)
+        self.sockMutex.acquire()
+        try:
             for node in nodes:
-                msg = pack("4sH", self.areYouThereMsg, self.sequenceNum)
-                self.sendsock.sendto(msg, (node, self.port))
+                self.sock.sendto(msg, (node, self.port))
         except Exception as e:
-            self.logger.warning("sendHeartbeats(): caught an exception: {}".format(e))
+            self.logger.warning("Heartbeater.sendHeartbeats(): caught an exception: {}".format(e))
+        finally:
+            self.sockMutex.release()
         self.sequenceNum = (self.sequenceNum + 1) % 65535
+        self.history.setCurrentTick(self.sequenceNum)
     
 
 

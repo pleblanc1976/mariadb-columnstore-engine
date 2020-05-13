@@ -59,6 +59,12 @@ class HBHistory:
         self.nodeHistory[node][tickID % self.tickWindow] = status
         self.mutex.release()
 
+    # defaultValue is used to init a fake history for a node this code is learning about
+    # 'now'.  If a node is inserted into the active list, we do not want to remove
+    # it right away b/c it hasn't responded to any pings yet.  Likewise,
+    # if a node is inserted into the inactive list, we do not want to activate it
+    # right away b/c it has responded to all pings sent so far (0).  TBD if we want
+    # to add logic to handle an 'init' value in the history.  
     def getNodeHistory(self, node, tickInterval, defaultValue = GoodResponse):
         self.mutex.acquire()
         if node not in self.nodeHistory:

@@ -95,7 +95,7 @@ class Config:
             self.logger.warning("Failed to read the primary node from {}.  There should be one and only one PrimaryNode listed"
                 .format(self.config_file))
             return False
-        primary_node = domtmp[0].nodeValue
+        primary_node = domtmp[0].firstChild.nodeValue
 
         desired_nodes.sort()
         active_nodes.sort()

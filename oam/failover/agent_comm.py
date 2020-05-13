@@ -7,23 +7,23 @@ class DummyAgent:
         pass
 
     def activateNodes(self, nodes):
-        print("Got activateNodes({})".format(nodes))
+        print("DummyAgent: Got activateNodes({})".format(nodes))
 
     def deactivateNodes(self, nodes):
-        print("Got deactivateNodes({})".format(nodes))
+        print("DummyAgent: Got deactivateNodes({})".format(nodes))
 
     def designatePrimaryNode(self, node):
-        print("Got designatePrimaryNode({})".format(node))
+        print("DummyAgent: Got designatePrimaryNode({})".format(node))
 
     def enterStandbyMode(self):
-        print("Got enterStandbyMode()")
+        print("DummyAgent: Got enterStandbyMode()")
 
     def getNodeHealth(self):
-        print("Got getNodeHealth()")
+        print("DummyAgent: Got getNodeHealth()")
         return 0
 
     def raiseAlarm(self, severity, msg):
-        print("Got raiseAlarm({}, {})".format(severity, msg))
+        print("DummyAgent: Got raiseAlarm({}, {})".format(severity, msg))
 
 
 # The AgentComm class
